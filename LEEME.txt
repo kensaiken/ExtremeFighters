@@ -1,0 +1,57 @@
+EXTREME FIGHTERS v0.3.0 - port nativo de Dragon Ball Z: Extreme Butoden (3DS)
+====================================================================
+
+COMO INSTALAR
+  1. Extrae TODO este ZIP en una carpeta.
+  2. Doble clic en  Instalar.exe  (si Windows muestra "SmartScreen":
+     "Mas informacion" > "Ejecutar de todas formas").
+  3. (Opcional) elige el idioma arriba a la derecha.
+  4. Elige tu .3ds DESCIFRADO del juego (boton de la carpeta).
+  5. Elige la CARPETA DE INSTALACION (segunda casilla). Puede ser otro
+     disco o un USB. Si eliges una carpeta con otras cosas dentro, se crea
+     una subcarpeta "ExtremeFighters" para no mezclar archivos.
+  6. Pulsa INSTALAR / RECOMPILAR y espera (10-20 minutos).
+  7. Juega con JUGAR, con el acceso directo del Escritorio o con
+     Jugar.exe dentro de la carpeta de instalacion.
+
+ZAKURO EDICION DBZ (incluido, no se descarga)
+  Es Zakuro v0.2.32 modificado para este juego:
+  - Menu de pausa (Esc o boton Home) y opciones traducidos al idioma del
+    instalador, con el estilo del instalador (oscuro y naranja). Se puede
+    cambiar en Opciones > Interfaz > Idioma del menu.
+  - Opciones que sobraban quitadas (biblioteca, camara, informes...).
+  - "Online": salas para jugar por internet con el combate inalambrico
+    local del propio juego (sin rollback).
+  - Controles de combate: L2 toca la carta del 2.o personaje y R2 la del
+    3.o en la pantalla inferior (cambiar de personaje o llamar al striker).
+    Se pueden cambiar en Opciones > Controles de combate.
+  - De serie: pantalla superior COMPLETA con la inferior pequena encima en
+    una esquina (F10 la muestra u oculta; tamano y lado en Opciones >
+    Graficos), pantalla completa y el juego en el idioma del instalador.
+  - Calidad grafica por niveles (Rendimiento, Equilibrada, Alta, Ultra); el
+    instalador elige una segun tu tarjeta grafica.
+  - Online > Salas publicas: escribe la direccion de un servidor de salas
+    de Extreme Fighters y unete con un clic (ver ExtremeFighters_Servidor).
+
+100% PORTATIL: todo queda dentro de la carpeta de instalacion
+  juego\        copia de tu .3ds
+  zakuro\       motor que ejecuta el juego
+  nativo\       codigo nativo recompilado (<TitleID>.dll)
+  partidas\     partidas guardadas y mods
+  appdata\      configuracion (controles, graficos, sonido), cache de
+                graficos y temporales de Zakuro
+  tools\        compilador Zig y su cache (puedes borrarlo al terminar)
+  logs\         registros si algo falla
+  Jugar.exe     abre el juego
+
+  Puedes mover o copiar la carpeta a otro disco, USB u otro PC y Jugar.exe
+  sigue funcionando con tu configuracion y tus partidas. Lo unico que se
+  crea fuera son los accesos directos del Escritorio y del menu Inicio.
+
+Requisitos: Windows 10 (1803+) u 11 de 64 bits, espacio libre (tamano del
+juego + ~2,5 GB durante la instalacion), internet durante la instalacion.
+
+Proyecto de fans, sin relacion con Bandai Namco ni Nintendo. No incluye
+archivos del juego: usa tu propia copia. 3dsrecomp y Zakuro son de fearkov
+(licencia MIT, github.com/fearkov). La edicion DBZ de Zakuro es una
+modificacion bajo la misma licencia (bin\LICENSE-zakuro.txt).

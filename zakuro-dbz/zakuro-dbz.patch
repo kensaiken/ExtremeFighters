@@ -1,0 +1,2246 @@
+From 2f6af48ecccb5f48d41acb574d61e9f92c021817 Mon Sep 17 00:00:00 2001
+From: Extreme Fighters <noreply@example.com>
+Date: Mon, 9 Nov 2026 11:26:08 +0000
+Subject: [PATCH 1/3] Extreme Fighters: Zakuro DBZ edition (translated themed
+ menus, touch buttons for character cards, Online)
+
+---
+ crates/zakuro/src/gamepad.rs  |  19 +-
+ crates/zakuro/src/gui.rs      |  84 +++++++-
+ crates/zakuro/src/lib.rs      |  22 ++-
+ crates/zakuro/src/menus.rs    | 357 ++++++++++++++++------------------
+ crates/zakuro/src/settings.rs |  47 +++++
+ crates/zakuro/src/tr.rs       | 191 ++++++++++++++++++
+ 6 files changed, 519 insertions(+), 201 deletions(-)
+ create mode 100644 crates/zakuro/src/tr.rs
+
+diff --git a/crates/zakuro/src/gamepad.rs b/crates/zakuro/src/gamepad.rs
+index 908b5c9..9e25a46 100644
+--- a/crates/zakuro/src/gamepad.rs
++++ b/crates/zakuro/src/gamepad.rs
+@@ -3,7 +3,7 @@
+ use gilrs::{Axis, Button, EventType, Gilrs};
+ use zakuro_core::services::hid::{InputState, PadState};
+ 
+-use crate::settings::PadButtons;
++use crate::settings::{PadButtons, TouchButtons};
+ 
+ /// how far a stick has to lean before it counts, some rest a little off
+ /// center.
+@@ -13,6 +13,7 @@ pub struct Gamepads {
+     /// none when the system could not be asked for controllers.
+     gilrs: Option<Gilrs>,
+     buttons: PadButtons,
++    touch: TouchButtons,
+ }
+ 
+ impl Gamepads {
+@@ -20,13 +21,17 @@ impl Gamepads {
+         let gilrs = Gilrs::new()
+             .inspect_err(|error| log::warn!("controllers are not available, {error}"))
+             .ok();
+-        Gamepads { gilrs, buttons }
++        Gamepads { gilrs, buttons, touch: TouchButtons::default() }
+     }
+ 
+     pub fn set_buttons(&mut self, buttons: PadButtons) {
+         self.buttons = buttons;
+     }
+ 
++    pub fn set_touch(&mut self, touch: TouchButtons) {
++        self.touch = touch;
++    }
++
+     /// takes in what the controllers did since the last call, and returns the
+     /// buttons pressed meanwhile.
+     pub fn poll(&mut self) -> Vec<Button> {
+@@ -55,10 +60,18 @@ impl Gamepads {
+         let Some(gilrs) = &self.gilrs else { return state };
+         for (_, pad) in gilrs.gamepads() {
+             for (button, bound) in self.buttons.map() {
+-                if pad.is_pressed(bound) {
++                // a button that touches a card does only that
++                if pad.is_pressed(bound) && !self.touch.uses(bound) {
+                     state.buttons.set(button, true);
+                 }
+             }
++            // DBZ edition: held, it touches its character's card on the
++            // bottom screen, unless the mouse already touches it
++            if state.touch.is_none() {
++                if let Some(&(_, at)) = self.touch.map().iter().find(|&&(button, _)| pad.is_pressed(button)) {
++                    state.touch = Some(at);
++                }
++            }
+             // the d-pad of some controllers is a pair of axes
+             let dpad = [
+                 (PadState::RIGHT, pad.value(Axis::DPadX) > 0.5),
+diff --git a/crates/zakuro/src/gui.rs b/crates/zakuro/src/gui.rs
+index a5b4c18..9787bc3 100644
+--- a/crates/zakuro/src/gui.rs
++++ b/crates/zakuro/src/gui.rs
+@@ -16,7 +16,12 @@ pub struct Gui {
+ impl Gui {
+     pub fn new(window: &Window) -> Gui {
+         let ctx = egui::Context::default();
+-        ctx.set_fonts(fonts(system_fonts()));
++        let mut extra = brand_font().into_iter().collect::<Vec<_>>();
++        let first = !extra.is_empty();
++        extra.extend(system_fonts());
++        ctx.set_fonts(fonts_with(extra, first));
++        ctx.set_theme(egui::Theme::Dark);
++        ctx.all_styles_mut(theme);
+         let state = egui_winit::State::new(
+             ctx.clone(),
+             ViewportId::ROOT,
+@@ -108,6 +113,83 @@ fn texture(id: TextureId) -> u64 {
+     }
+ }
+ 
++/// DBZ edition: the installer's orange.
++pub const ORANGE: egui::Color32 = egui::Color32::from_rgb(255, 160, 30);
++
++/// DBZ edition: the look of the installer, dark panels with orange edges,
++/// bigger text and buttons.
++fn theme(style: &mut egui::Style) {
++    use egui::{Color32, CornerRadius, FontFamily, FontId, Stroke, TextStyle};
++    style.text_styles = [
++        (TextStyle::Small, FontId::new(12.0, FontFamily::Proportional)),
++        (TextStyle::Body, FontId::new(15.5, FontFamily::Proportional)),
++        (TextStyle::Button, FontId::new(16.0, FontFamily::Proportional)),
++        (TextStyle::Heading, FontId::new(21.0, FontFamily::Proportional)),
++        (TextStyle::Monospace, FontId::new(14.0, FontFamily::Monospace)),
++    ]
++    .into();
++    style.spacing.item_spacing = egui::vec2(8.0, 6.0);
++    style.spacing.button_padding = egui::vec2(10.0, 5.0);
++    style.spacing.interact_size.y = 24.0;
++    let v = &mut style.visuals;
++    v.dark_mode = true;
++    v.window_fill = Color32::from_rgba_unmultiplied(20, 17, 16, 244);
++    v.panel_fill = Color32::from_rgb(20, 17, 16);
++    v.window_stroke = Stroke::new(2.0, ORANGE);
++    v.window_corner_radius = CornerRadius::same(10);
++    v.menu_corner_radius = CornerRadius::same(8);
++    v.extreme_bg_color = Color32::from_rgb(12, 11, 12);
++    v.faint_bg_color = Color32::from_rgb(34, 30, 28);
++    v.hyperlink_color = ORANGE;
++    v.selection.bg_fill = Color32::from_rgb(200, 100, 0);
++    v.selection.stroke = Stroke::new(1.5, Color32::WHITE);
++    v.slider_trailing_fill = true;
++    let radius = CornerRadius::same(6);
++    let w = &mut v.widgets;
++    w.noninteractive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(90, 60, 30));
++    w.noninteractive.fg_stroke = Stroke::new(1.0, Color32::from_rgb(232, 232, 236));
++    w.inactive.bg_fill = Color32::from_rgb(52, 50, 56);
++    w.inactive.weak_bg_fill = Color32::from_rgb(52, 50, 56);
++    w.inactive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(110, 105, 112));
++    w.inactive.fg_stroke = Stroke::new(1.0, Color32::WHITE);
++    w.hovered.bg_fill = Color32::from_rgb(235, 120, 10);
++    w.hovered.weak_bg_fill = Color32::from_rgb(235, 120, 10);
++    w.hovered.bg_stroke = Stroke::new(1.5, Color32::from_rgb(255, 220, 130));
++    w.hovered.fg_stroke = Stroke::new(1.5, Color32::BLACK);
++    w.active.bg_fill = Color32::from_rgb(255, 170, 40);
++    w.active.weak_bg_fill = Color32::from_rgb(255, 170, 40);
++    w.active.bg_stroke = Stroke::new(1.5, Color32::WHITE);
++    w.active.fg_stroke = Stroke::new(1.5, Color32::BLACK);
++    w.open.bg_fill = Color32::from_rgb(70, 50, 30);
++    w.open.weak_bg_fill = Color32::from_rgb(70, 50, 30);
++    for widget in [&mut w.noninteractive, &mut w.inactive, &mut w.hovered, &mut w.active, &mut w.open] {
++        widget.corner_radius = radius;
++    }
++}
++
++/// DBZ edition: Windows' Bahnschrift, a condensed font like the
++/// installer's, for the menus' Latin text.
++fn brand_font() -> Option<Vec<u8>> {
++    let windows = std::path::PathBuf::from(std::env::var_os("WINDIR").unwrap_or_else(|| "C:\\Windows".into()));
++    std::fs::read(windows.join("Fonts").join("bahnschrift.ttf")).ok()
++}
++
++/// the fonts, with the first extra one ahead of egui's own when first says
++/// so, the brand font, and the rest after them to fall back on.
++fn fonts_with(extra: Vec<Vec<u8>>, first: bool) -> egui::FontDefinitions {
++    let mut fonts = fonts(extra);
++    if first {
++        for family in [egui::FontFamily::Proportional] {
++            let list = fonts.families.entry(family).or_default();
++            if let Some(at) = list.iter().position(|name| name == "system 0") {
++                let name = list.remove(at);
++                list.insert(0, name);
++            }
++        }
++    }
++    fonts
++}
++
+ /// egui's own fonts, then extra ones to fall back on for what they lack.
+ /// game names come in Japanese, Korean and Chinese, whose characters
+ /// egui's fonts have none of and drew as boxes.
+diff --git a/crates/zakuro/src/lib.rs b/crates/zakuro/src/lib.rs
+index 07fa791..ade30c3 100644
+--- a/crates/zakuro/src/lib.rs
++++ b/crates/zakuro/src/lib.rs
+@@ -14,6 +14,7 @@ mod present;
+ mod recompile;
+ mod report;
+ mod settings;
++mod tr;
+ mod zig;
+ 
+ use std::path::{Path, PathBuf};
+@@ -96,7 +97,12 @@ pub fn run_with(linked: Option<Linked>, overlay: Option<Box<dyn GameOverlay>>) {
+ 
+     let mut app = App {
+         keyboard: Keyboard::new(settings.keys.clone()),
+-        gamepads: gamepad::Gamepads::new(settings.pad.clone()),
++        gamepads: {
++            let mut gamepads = gamepad::Gamepads::new(settings.pad.clone());
++            gamepads.set_touch(settings.touch.clone());
++            tr::set_language(&settings.ui_language);
++            gamepads
++        },
+         scale: options.scale.unwrap_or(settings.scale).max(1),
+         layout: settings.layout,
+         orientation: settings.orientation,
+@@ -817,7 +823,7 @@ impl App {
+         let pressed = event.state == ElementState::Pressed;
+         let PhysicalKey::Code(code) = event.physical_key else { return };
+         // Escape leaves a controller binding waiting for a button as it was
+-        if pressed && code == KeyCode::Escape && self.menus.rebinding_pad.take().is_some() {
++        if pressed && code == KeyCode::Escape && (self.menus.rebinding_pad.take().is_some() | self.menus.rebinding_touch.take().is_some()) {
+             return;
+         }
+         // a binding waiting for a key takes it, Escape leaves it as it was
+@@ -868,7 +874,13 @@ impl App {
+     /// it, and Home opens and closes the menu over the game.
+     fn poll_gamepads(&mut self) {
+         for button in self.gamepads.poll() {
+-            if let Some(index) = self.menus.rebinding_pad.take() {
++            if let Some(index) = self.menus.rebinding_touch.take() {
++                match index {
++                    0 => self.settings.touch.second = button,
++                    _ => self.settings.touch.third = button,
++                }
++                self.apply_settings();
++            } else if let Some(index) = self.menus.rebinding_pad.take() {
+                 if let Some((_, bound)) = self.settings.pad.all_mut().into_iter().nth(index) {
+                     *bound = button;
+                 }
+@@ -970,6 +982,8 @@ impl App {
+         self.apply_camera();
+         self.keyboard.set_keys(self.settings.keys.clone());
+         self.gamepads.set_buttons(self.settings.pad.clone());
++        self.gamepads.set_touch(self.settings.touch.clone());
++        tr::set_language(&self.settings.ui_language);
+         self.apply_volume();
+         self.apply_layout();
+     }
+@@ -1323,7 +1337,7 @@ impl App {
+         let playing = self.game.is_some() && !self.paused && !self.menus.over_game() && !typing;
+         // Tab or a controller's right trigger, or the right stick's click
+         // while ZR has the trigger, whichever no button of the console's is on
+-        let free = |button: gilrs::Button| self.settings.pad.map().iter().all(|&(_, bound)| bound != button);
++        let free = |button: gilrs::Button| self.settings.pad.map().iter().all(|&(_, bound)| bound != button) && !self.settings.touch.uses(button);
+         let trigger = [gilrs::Button::RightTrigger2, gilrs::Button::RightThumb].into_iter().find(|&button| free(button));
+         let fast = playing && (self.fast_forward_key || trigger.is_some_and(|trigger| self.gamepads.holding(trigger)));
+         if fast {
+diff --git a/crates/zakuro/src/menus.rs b/crates/zakuro/src/menus.rs
+index c50f06e..f933dee 100644
+--- a/crates/zakuro/src/menus.rs
++++ b/crates/zakuro/src/menus.rs
+@@ -11,7 +11,8 @@ use zakuro_core::services::keyboard::Request;
+ use crate::library::{Game, Library, ICON_SIZE};
+ use crate::recompile::{Job, Stage, Wanted};
+ use crate::gamepad::button_name;
+-use crate::settings::{game_key, CameraSource, Filter, GameSettings, Keys, Language, Orientation, PadButtons, Renderer, Screens, Settings, Stereo3d, TopShape};
++use crate::tr::{t, LANGUAGES};
++use crate::settings::{game_key, Filter, GameSettings, Keys, Language, Orientation, PadButtons, Renderer, Screens, Settings, Stereo3d, TopShape, TouchButtons};
+ 
+ /// what the user asked for.
+ #[derive(Debug, Clone, PartialEq)]
+@@ -81,6 +82,9 @@ pub struct Menus {
+     /// the controller binding waiting for a button, by its place in
+     /// PadButtons::all_mut.
+     pub rebinding_pad: Option<usize>,
++    /// DBZ edition: the touch button waiting for a controller button, 0 for
++    /// the second character's card, 1 for the third's.
++    pub rebinding_touch: Option<usize>,
+     /// something to tell the user, until they close it.
+     pub message: Option<String>,
+     /// something to tell the user for a moment, over the game, and since
+@@ -429,7 +433,7 @@ impl Menus {
+                 .interactable(false)
+                 .show(&ctx, |ui| {
+                     egui::Frame::popup(ui.style()).show(ui, |ui| {
+-                        ui.label(RichText::new("» fast forward").monospace());
++                        ui.label(RichText::new(format!("» {}", t("fast forward"))).monospace());
+                     });
+                 });
+         }
+@@ -437,75 +441,64 @@ impl Menus {
+             // clicks go through to the screen under it
+             egui::Area::new(egui::Id::new("fps")).fixed_pos(egui::pos2(8.0, 8.0)).interactable(false).show(&ctx, |ui| {
+                 egui::Frame::popup(ui.style()).show(ui, |ui| {
+-                    ui.label(RichText::new(format!("{fps:.0} fps")).monospace());
++                    ui.label(RichText::new(format!("{fps:.0} {}", t("fps"))).monospace());
+                 });
+             });
+         }
+         if !self.menu_open {
+             return actions;
+         }
+-        egui::Window::new("Paused")
++        egui::Window::new(RichText::new(t("PAUSE")).size(22.0).strong().color(crate::gui::ORANGE))
++            .id(egui::Id::new("paused"))
+             .collapsible(false)
+             .resizable(false)
+             .anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO)
+             .show(&ctx, |ui| {
+-                ui.label(RichText::new(name).strong());
+-                ui.label(RichText::new(if recompiled { "running its recompiled code" } else { "interpreted" }).weak());
+-                ui.add_space(6.0);
+-                let wide = |ui: &mut egui::Ui, text: &str| ui.add_sized([200.0, 28.0], egui::Button::new(text)).clicked();
+-                if wide(ui, "Resume") {
++                ui.label(RichText::new(name).strong().size(17.0));
++                ui.label(RichText::new(if recompiled { t("running its recompiled code") } else { t("interpreted") }).weak());
++                ui.add_space(8.0);
++                let wide = |ui: &mut egui::Ui, text: &str| ui.add_sized([250.0, 34.0], egui::Button::new(RichText::new(text).size(17.0))).clicked();
++                if wide(ui, t("Resume")) {
+                     actions.push(Action::Resume);
+                 }
+-                if wide(ui, "Reset") {
++                if wide(ui, t("Reset")) {
+                     actions.push(Action::Reset);
+                 }
+-                if wide(ui, "Fullscreen") {
++                if wide(ui, t("Fullscreen")) {
+                     actions.push(Action::Fullscreen);
+                 }
+-                ui.add_space(4.0);
++                ui.add_space(6.0);
+                 ui.horizontal(|ui| {
+-                    ui.add(egui::DragValue::new(&mut self.slot).range(1..=9).prefix("Slot "));
+-                    ui.label(RichText::new(saved.unwrap_or("empty")).weak());
++                    ui.add(egui::DragValue::new(&mut self.slot).range(1..=9).prefix(t("Slot ")));
++                    ui.label(RichText::new(saved.unwrap_or(t("empty"))).weak());
+                 });
+                 ui.horizontal(|ui| {
+-                    if ui.add_sized([98.0, 28.0], egui::Button::new("Save state")).on_hover_text("F5 saves to this slot while playing.").clicked() {
++                    if ui.add_sized([122.0, 32.0], egui::Button::new(t("Save state"))).on_hover_text(t("F5 saves to this slot while playing.")).clicked() {
+                         actions.push(Action::SaveState);
+                     }
+                     if ui
+-                        .add_enabled(saved.is_some(), egui::Button::new("Load state").min_size(Vec2::new(98.0, 28.0)))
+-                        .on_hover_text("F8 loads this slot while playing.")
++                        .add_enabled(saved.is_some(), egui::Button::new(t("Load state")).min_size(Vec2::new(122.0, 32.0)))
++                        .on_hover_text(t("F8 loads this slot while playing."))
+                         .clicked()
+                     {
+                         actions.push(Action::LoadState);
+                     }
+                 });
+-                ui.add_space(4.0);
+-                if wide(ui, "Settings") {
++                ui.add_space(6.0);
++                if wide(ui, t("Online")) {
++                    self.multiplayer_open = true;
++                }
++                if wide(ui, t("Options")) {
+                     self.settings_open = true;
+                 }
+-                if let Some(program_id) = program_id.filter(|_| wide(ui, "Settings for this game")) {
++                if let Some(program_id) = program_id.filter(|_| wide(ui, t("Options for this game"))) {
+                     self.game_settings = Some((program_id, name.to_owned()));
+                 }
+-                if wide(ui, "Cheats") {
++                if wide(ui, t("Cheats")) {
+                     self.cheats_open = true;
+                 }
+-                if wide(ui, "Multiplayer") {
+-                    self.multiplayer_open = true;
+-                }
+-                if ui
+-                    .add_sized([200.0, 28.0], egui::Button::new("Show the camera a picture"))
+-                    .on_hover_text("Pick a picture for the console's cameras to see, a QR code's say, in place of the computer's camera.")
+-                    .clicked()
+-                {
+-                    actions.push(Action::ChooseCameraPicture);
+-                }
+-                if wide(ui, "Copy info for a report") {
+-                    actions.push(Action::CopyReport);
+-                }
+-                if wide(ui, "Back to the library") {
+-                    actions.push(Action::Library);
+-                }
+-                if wide(ui, "Quit") {
++                ui.add_space(6.0);
++                if wide(ui, t("Quit")) {
+                     actions.push(Action::Quit);
+                 }
+                 for job in jobs.iter().filter(|job| !job.stage().finished()) {
+@@ -525,7 +518,7 @@ impl Menus {
+     pub fn cheats(&mut self, ctx: &egui::Context, cheats: &[(String, bool, String, bool)]) -> Vec<Action> {
+         let mut actions = Vec::new();
+         let mut open = self.cheats_open;
+-        egui::Window::new("Cheats").open(&mut open).default_width(380.0).show(ctx, |ui| {
++        egui::Window::new(t("Cheats")).id(egui::Id::new("cheats")).open(&mut open).default_width(380.0).show(ctx, |ui| {
+             let mut checkbox = |ui: &mut egui::Ui, index: usize, name: &str, enabled: bool, notes: &str| {
+                 let mut on = enabled;
+                 let mut response = ui.checkbox(&mut on, name);
+@@ -538,7 +531,7 @@ impl Menus {
+             };
+             // Zakuro's own, tested on this build of the game
+             if cheats.iter().any(|cheat| cheat.3) {
+-                ui.label(RichText::new("Enhancements").strong());
++                ui.label(RichText::new(t("Enhancements")).strong());
+                 for (index, (name, enabled, notes, _)) in cheats.iter().enumerate().filter(|(_, cheat)| cheat.3) {
+                     checkbox(ui, index, name, *enabled, "");
+                     // what it does to the game and who made it, in sight
+@@ -548,7 +541,7 @@ impl Menus {
+                 ui.separator();
+             }
+             if !cheats.iter().any(|cheat| !cheat.3) {
+-                ui.label(RichText::new("No cheats yet. Add one below, or put the cheat file Citra or Azahar has for this game in the cheats folder.").weak());
++                ui.label(RichText::new(t("No cheats yet. Add one below, or put the cheat file Citra or Azahar has for this game in the cheats folder.")).weak());
+             }
+             egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+                 for (index, (name, enabled, notes, _)) in cheats.iter().enumerate().filter(|(_, cheat)| !cheat.3) {
+@@ -556,17 +549,17 @@ impl Menus {
+                 }
+             });
+             ui.separator();
+-            ui.label("Add a cheat");
+-            ui.add(egui::TextEdit::singleline(&mut self.cheat_name).hint_text("Name"));
++            ui.label(t("Add a cheat"));
++            ui.add(egui::TextEdit::singleline(&mut self.cheat_name).hint_text(t("Name")));
+             ui.add(egui::TextEdit::multiline(&mut self.cheat_code).hint_text("00000000 00000000").desired_rows(4).font(egui::TextStyle::Monospace));
+             ui.horizontal(|ui| {
+-                if ui.button("Add").clicked() && !self.cheat_code.trim().is_empty() {
++                if ui.button(t("Add")).clicked() && !self.cheat_code.trim().is_empty() {
+                     actions.push(Action::AddCheat(std::mem::take(&mut self.cheat_name), std::mem::take(&mut self.cheat_code)));
+                 }
+-                if ui.button("Reload").on_hover_text("Read the cheats again from their file, after changing it.").clicked() {
++                if ui.button(t("Reload")).on_hover_text("Read the cheats again from their file, after changing it.").clicked() {
+                     actions.push(Action::ReloadCheats);
+                 }
+-                if ui.button("Open the cheats folder").clicked() {
++                if ui.button(t("Open the cheats folder")).clicked() {
+                     actions.push(Action::CheatsFolder);
+                 }
+             });
+@@ -581,33 +574,33 @@ impl Menus {
+         let mut actions = Vec::new();
+         let before = settings.clone();
+         let mut open = self.multiplayer_open;
+-        egui::Window::new("Multiplayer").open(&mut open).default_width(380.0).show(ctx, |ui| {
++        egui::Window::new(t("Online")).id(egui::Id::new("multiplayer")).open(&mut open).default_width(380.0).show(ctx, |ui| {
+             ui.label(
+-                RichText::new("Local wireless play with others goes through a room, which one of you opens and the others join over the network.")
++                RichText::new(t("Online play with others goes through a room, which one of you opens and the others join over the internet. It uses the game's own local wireless battle."))
+                     .weak(),
+             );
+             ui.add_space(4.0);
+             ui.horizontal(|ui| {
+-                ui.label("Nickname");
++                ui.label(t("Nickname"));
+                 ui.add(egui::TextEdit::singleline(&mut settings.nickname).char_limit(10).hint_text("Player"))
+                     .on_hover_text("The name others see, and the console's own, which games show. It changes with the next game started.");
+             });
+             ui.separator();
+             match room {
+                 Some(room) => {
+-                    ui.label(RichText::new(format!("In the room {}", room.name)).strong());
++                    ui.label(RichText::new(format!("{} {}", t("In the room"), room.name)).strong());
+                     if let Some(port) = room.port {
+-                        ui.label(format!("Open on port {port}. Others join with this computer's address and that port. Over the internet the router has to let that port through."));
++                        ui.label(format!("{} {port}. {}", t("Open on port"), t("Others join with this computer's address and this port. Over the internet the router has to let the port through.")));
+                     }
+                     ui.add_space(4.0);
+                     for (nickname, game) in &room.members {
+                         match game.is_empty() {
+                             true => ui.label(nickname),
+-                            false => ui.label(format!("{nickname}, playing {game}")),
++                            false => ui.label(format!("{nickname}, {} {game}", t("playing"))),
+                         };
+                     }
+                     ui.add_space(4.0);
+-                    let leave = if room.port.is_some() { "Close the room" } else { "Leave the room" };
++                    let leave = if room.port.is_some() { t("Close the room") } else { t("Leave the room") };
+                     if ui.button(leave).clicked() {
+                         actions.push(Action::LeaveRoom);
+                     }
+@@ -620,7 +613,7 @@ impl Menus {
+                                 if let Some(progress) = progress {
+                                     ui.add(egui::ProgressBar::new(*progress).show_percentage());
+                                 }
+-                                if ui.button("Leave").clicked() {
++                                if ui.button(t("Leave")).clicked() {
+                                     actions.push(Action::DlpLeave);
+                                 }
+                             }
+@@ -654,30 +647,30 @@ impl Menus {
+                     }
+                 }
+                 None => {
+-                    ui.label(RichText::new("Join a room").strong());
++                    ui.label(RichText::new(t("Join a room")).strong());
+                     ui.horizontal(|ui| {
+-                        ui.label("Address");
++                        ui.label(t("Address"));
+                         ui.add(egui::TextEdit::singleline(&mut settings.room_address).hint_text("192.168.0.10:24873"));
+                     });
+                     ui.horizontal(|ui| {
+-                        ui.label("Password");
+-                        ui.add(egui::TextEdit::singleline(&mut self.room_password).password(true).hint_text("none"));
++                        ui.label(t("Password"));
++                        ui.add(egui::TextEdit::singleline(&mut self.room_password).password(true).hint_text(t("none")));
+                     });
+-                    if ui.add_enabled(!settings.room_address.trim().is_empty(), egui::Button::new("Join")).clicked() {
++                    if ui.add_enabled(!settings.room_address.trim().is_empty(), egui::Button::new(t("Join"))).clicked() {
+                         actions.push(Action::JoinRoom);
+                     }
+                     ui.separator();
+-                    ui.label(RichText::new("Open a room").strong());
++                    ui.label(RichText::new(t("Open a room")).strong());
+                     ui.horizontal(|ui| {
+-                        ui.label("Name");
++                        ui.label(t("Name"));
+                         ui.add(egui::TextEdit::singleline(&mut settings.room_name).hint_text("Zakuro"));
+                     });
+                     ui.horizontal(|ui| {
+-                        ui.label("Port");
++                        ui.label(t("Port"));
+                         ui.add(egui::DragValue::new(&mut settings.room_port).range(1024..=65535));
+                     });
+-                    ui.label(RichText::new("The password above, when there is one, is the room's.").weak());
+-                    if ui.button("Open").clicked() {
++                    ui.label(RichText::new(t("The password above, when there is one, is the room's.")).weak());
++                    if ui.button(t("Open")).clicked() {
+                         actions.push(Action::HostRoom);
+                     }
+                 }
+@@ -699,30 +692,40 @@ impl Menus {
+         // taller than a screen has room for, so it scrolls, and it can be
+         // dragged to any size that fits
+         let room = ctx.content_rect().height() - 16.0;
+-        egui::Window::new("Settings")
++        egui::Window::new(RichText::new(t("Options")).size(20.0).strong().color(crate::gui::ORANGE))
+             .id(egui::Id::new("settings"))
+             .open(&mut open)
+             .vscroll(true)
+-            .default_size([460.0, room])
++            .default_size([480.0, room])
+             .max_height(room)
+             .show(ctx, |ui| {
+                 if own {
+-                    ui.label(RichText::new("This game has settings of its own, which go over these. They are in Settings for this game, in the menu.").weak());
++                    ui.label(RichText::new(t("This game has options of its own, which go over these. They are in Options for this game, in the menu.")).weak());
+                 }
+-                ui.heading("Games");
+-                ui.horizontal(|ui| {
+-                    match &settings.games {
+-                        Some(folder) => ui.label(folder.display().to_string()),
+-                        None => ui.label(RichText::new("none").weak()),
+-                    };
+-                    if ui.button("Choose…").clicked() {
+-                        actions.push(Action::ChooseFolder);
+-                    }
++                section(ui, t("Combat controls"));
++                ui.checkbox(&mut settings.touch.enabled, t("Change character / striker with the controller"));
++                ui.add_enabled_ui(settings.touch.enabled, |ui| {
++                    egui::Grid::new("combat").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
++                        for (i, (label, button)) in [(t("2nd character"), settings.touch.second), (t("3rd character"), settings.touch.third)].into_iter().enumerate() {
++                            ui.label(label);
++                            let text = if self.rebinding_touch == Some(i) { t("press a button…") } else { button_name(button) };
++                            if ui.add_sized([150.0, 24.0], egui::Button::new(text)).clicked() {
++                                self.rebinding_touch = Some(i);
++                                self.rebinding = None;
++                                self.rebinding_pad = None;
++                            }
++                            ui.end_row();
++                        }
++                    });
+                 });
++                ui.label(RichText::new(t("Holding the button touches that character's card on the bottom screen, to change to them or call them in as a striker.")).weak());
++                if ui.button(t("Default combat controls")).clicked() {
++                    settings.touch = TouchButtons::default();
++                    self.rebinding_touch = None;
++                }
+ 
+-                ui.separator();
+-                ui.heading("Graphics");
+-                egui::ComboBox::from_label("Presented with")
++                section(ui, t("Graphics"));
++                egui::ComboBox::from_label(t("Presented with"))
+                     .selected_text(match settings.renderer {
+                         Renderer::Vulkan => "Vulkan",
+                         Renderer::OpenGl => "OpenGL",
+@@ -747,114 +750,75 @@ impl Menus {
+                 stereo_3d(ui, &mut settings.stereo);
+                 let stereo = settings.stereo != Stereo3d::Off;
+                 ui.add_enabled_ui(stereo, |ui| depth_3d(ui, &mut settings.depth_3d));
+-                // on whatever the 3D is here, a game can have its own
+-                ui.checkbox(&mut settings.swap_eyes, "Swap eyes")
+-                    .on_hover_text("Each eye gets the other's picture, for viewing cross-eyed, glasses worn the other way round, or a monitor whose rows start with the other eye.");
+-                ui.label(
+-                    RichText::new("F9 switches them while playing, F10 between the top and the bottom screen alone.").weak(),
+-                );
+-                ui.label(RichText::new("The presenter changes the next time Zakuro starts, the 3D with the next game.").weak());
++                ui.checkbox(&mut settings.swap_eyes, t("Swap eyes"));
++                ui.label(RichText::new(t("F9 switches them while playing, F10 between the top and the bottom screen alone.")).weak());
++                ui.label(RichText::new(t("The presenter changes the next time Zakuro starts, the 3D with the next game.")).weak());
+ 
+-                ui.separator();
+-                ui.heading("Emulation");
++                section(ui, t("Game"));
+                 language(ui, &mut settings.language);
+-                egui::ComboBox::from_label("Cameras").selected_text(settings.camera.name()).show_ui(ui, |ui| {
+-                    for source in CameraSource::ALL {
+-                        ui.selectable_value(&mut settings.camera, source, source.name());
+-                    }
+-                })
+-                .response
+-                .on_hover_text("What the console's cameras see. The computer's camera turns on only while a game takes pictures.");
+-                if settings.camera == CameraSource::Picture {
+-                    ui.horizontal(|ui| {
+-                        ui.label("Picture");
+-                        match &settings.camera_picture {
+-                            Some(path) => ui.label(path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()),
+-                            None => ui.label(RichText::new("none").weak()),
+-                        };
+-                        if ui.button("Choose…").clicked() {
+-                            actions.push(Action::ChooseCameraPicture);
+-                        }
+-                    });
+-                }
+                 code(ui, &mut settings.recompiled);
+-                ui.label(RichText::new("It changes with the next game started, or Reset.").weak());
++                ui.label(RichText::new(t("It changes with the next game started, or Reset.")).weak());
+ 
+-                ui.separator();
+-                ui.heading("Sound");
+-                ui.add(egui::Slider::new(&mut settings.volume, 0.0..=1.0).text("Volume").show_value(false));
+-                ui.checkbox(&mut settings.mute, "Mute");
++                section(ui, t("Sound"));
++                ui.add(egui::Slider::new(&mut settings.volume, 0.0..=1.0).text(t("Volume")).show_value(false));
++                ui.checkbox(&mut settings.mute, t("Mute"));
+ 
+-                ui.separator();
+-                ui.heading("Interface");
+-                ui.checkbox(&mut settings.show_fps, "Show the frame rate");
+-                ui.horizontal(|ui| {
+-                    ui.label("Library background");
+-                    match &settings.background {
+-                        Some(path) => ui.label(path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()),
+-                        None => ui.label(RichText::new("none").weak()),
+-                    };
+-                    if ui.button("Choose…").clicked() {
+-                        actions.push(Action::ChooseBackground);
+-                    }
+-                    if settings.background.is_some() && ui.button("Remove").clicked() {
+-                        settings.background = None;
++                section(ui, t("Interface"));
++                let current = LANGUAGES.iter().find(|(code, _)| *code == settings.ui_language).map_or("English", |(_, name)| *name);
++                egui::ComboBox::from_label(t("Menu language")).selected_text(current).show_ui(ui, |ui| {
++                    for (code, name) in LANGUAGES {
++                        ui.selectable_value(&mut settings.ui_language, code.to_owned(), name);
+                     }
+                 });
+-                ui.add_enabled(
+-                    settings.background.is_some(),
+-                    egui::Slider::new(&mut settings.background_opacity, 0.0..=1.0)
+-                        .text("Opacity")
+-                        .custom_formatter(|value, _| format!("{:.0}%", value * 100.0)),
+-                );
+-
++                ui.checkbox(&mut settings.show_fps, t("Show the frame rate"));
+ 
+-                ui.separator();
+-                ui.heading("Controls");
+-                egui::Grid::new("controls").num_columns(4).spacing([12.0, 4.0]).show(ui, |ui| {
+-                    for (i, (name, key)) in settings.keys.all_mut().into_iter().enumerate() {
+-                        ui.label(name);
+-                        let text = if self.rebinding == Some(i) { "press a key…".to_owned() } else { key_name(*key) };
++                section(ui, t("Controller"));
++                egui::Grid::new("controller").num_columns(4).spacing([12.0, 4.0]).show(ui, |ui| {
++                    for (i, (name, button)) in settings.pad.all_mut().into_iter().enumerate() {
++                        ui.label(t(name));
++                        let text = if self.rebinding_pad == Some(i) { t("press a button…") } else { button_name(*button) };
+                         if ui.add_sized([110.0, 20.0], egui::Button::new(text)).clicked() {
+-                            self.rebinding = Some(i);
+-                            self.rebinding_pad = None;
++                            self.rebinding_pad = Some(i);
++                            self.rebinding = None;
++                            self.rebinding_touch = None;
+                         }
+                         if i % 2 == 1 {
+                             ui.end_row();
+                         }
+                     }
+                 });
+-                if ui.button("Default controls").clicked() {
+-                    settings.keys = Keys::default();
+-                    self.rebinding = None;
++                ui.label(RichText::new(t("The circle pad is the left stick, and Home opens the menu over the game.")).weak());
++                if ui.button(t("Default controller")).clicked() {
++                    settings.pad = PadButtons::default();
++                    self.rebinding_pad = None;
+                 }
+-                ui.label(RichText::new("Drag with the right mouse button to tilt the console, for games that use the motion sensors.").weak());
+ 
+-                ui.separator();
+-                ui.heading("Controller");
+-                egui::Grid::new("controller").num_columns(4).spacing([12.0, 4.0]).show(ui, |ui| {
+-                    for (i, (name, button)) in settings.pad.all_mut().into_iter().enumerate() {
+-                        ui.label(name);
+-                        let text = if self.rebinding_pad == Some(i) { "press a button…" } else { button_name(*button) };
++                section(ui, t("Keyboard"));
++                egui::Grid::new("controls").num_columns(4).spacing([12.0, 4.0]).show(ui, |ui| {
++                    for (i, (name, key)) in settings.keys.all_mut().into_iter().enumerate() {
++                        ui.label(t(name));
++                        let text = if self.rebinding == Some(i) { t("press a key…").to_owned() } else { key_name(*key) };
+                         if ui.add_sized([110.0, 20.0], egui::Button::new(text)).clicked() {
+-                            self.rebinding_pad = Some(i);
+-                            self.rebinding = None;
++                            self.rebinding = Some(i);
++                            self.rebinding_pad = None;
++                            self.rebinding_touch = None;
+                         }
+                         if i % 2 == 1 {
+                             ui.end_row();
+                         }
+                     }
+                 });
+-                ui.label(RichText::new("The circle pad is the left stick, and Home opens the menu over the game.").weak());
+-                if ui.button("Default controller").clicked() {
+-                    settings.pad = PadButtons::default();
+-                    self.rebinding_pad = None;
++                if ui.button(t("Default controls")).clicked() {
++                    settings.keys = Keys::default();
++                    self.rebinding = None;
+                 }
++                ui.label(RichText::new(t("Drag with the right mouse button to tilt the console, for games that use the motion sensors.")).weak());
+             });
+         self.settings_open = open;
+         if !open {
+             self.rebinding = None;
+             self.rebinding_pad = None;
++            self.rebinding_touch = None;
+         }
+         if *settings != before {
+             actions.push(Action::Settings);
+@@ -872,16 +836,15 @@ impl Menus {
+         let general: &Settings = settings;
+         let mut open = true;
+         let room = ctx.content_rect().height() - 16.0;
+-        egui::Window::new(format!("Settings for {name}"))
++        egui::Window::new(RichText::new(format!("{} {name}", t("Options for"))).strong().color(crate::gui::ORANGE))
+             .id(egui::Id::new("game settings"))
+             .open(&mut open)
+             .vscroll(true)
+             .default_size([420.0, room.min(540.0)])
+             .max_height(room)
+             .show(ctx, |ui| {
+-                ui.label(RichText::new("Tick what this game is to have of its own. The rest follows the general settings.").weak());
+-                ui.separator();
+-                ui.heading("Graphics");
++                ui.label(RichText::new(t("Tick what this game is to have of its own. The rest follows the general settings.")).weak());
++                section(ui, t("Graphics"));
+                 own(ui, &mut game.hardware_rasterizer, &general.hardware_rasterizer, rasterizer);
+                 own(ui, &mut game.resolution, &general.resolution, resolution);
+                 own(ui, &mut game.texture_packs, &general.texture_packs, texture_packs);
+@@ -894,13 +857,12 @@ impl Menus {
+                 own(ui, &mut game.top_shape, &general.top_shape, top_shape);
+                 own(ui, &mut game.stereo, &general.stereo, stereo_3d);
+                 own(ui, &mut game.depth_3d, &general.depth_3d, depth_3d);
+-                ui.separator();
+-                ui.heading("Emulation");
++                section(ui, t("Game"));
+                 own(ui, &mut game.language, &general.language, language);
+                 own(ui, &mut game.recompiled, &general.recompiled, code);
+                 ui.separator();
+-                ui.label(RichText::new("Where the 3D is drawn, its resolution, the texture packs, the language and what runs the code change the next time the game starts, or with Reset.").weak());
+-                if ui.add_enabled(game != GameSettings::default(), egui::Button::new("Follow the general settings in everything")).clicked() {
++                ui.label(RichText::new(t("Where the 3D is drawn, its resolution, the texture packs, the language and what runs the code change the next time the game starts, or with Reset.")).weak());
++                if ui.add_enabled(game != GameSettings::default(), egui::Button::new(t("Follow the general settings in everything"))).clicked() {
+                     game = GameSettings::default();
+                 }
+             });
+@@ -928,7 +890,8 @@ impl Menus {
+         let (_, text) = self.typing.as_mut()?;
+         let confirm = request.buttons.len() - 1;
+         let mut action = None;
+-        egui::Window::new("Keyboard")
++        egui::Window::new(t("Keyboard input"))
++            .id(egui::Id::new("keyboard"))
+             .collapsible(false)
+             .resizable(false)
+             .anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO)
+@@ -1006,7 +969,7 @@ impl Menus {
+                             ui.ctx().copy_text(report.clone());
+                         }
+                     }
+-                    if ui.button("OK").clicked() {
++                    if ui.button(t("OK")).clicked() {
+                         self.message = None;
+                         self.report = None;
+                     }
+@@ -1021,7 +984,7 @@ impl Menus {
+ fn own<T: Clone>(ui: &mut egui::Ui, own: &mut Option<T>, general: &T, row: impl FnOnce(&mut egui::Ui, &mut T)) {
+     ui.horizontal(|ui| {
+         let mut ticked = own.is_some();
+-        if ui.checkbox(&mut ticked, "").on_hover_text("This game's own, rather than the general setting.").changed() {
++        if ui.checkbox(&mut ticked, "").on_hover_text(t("This game's own, rather than the general setting.")).changed() {
+             *own = ticked.then(|| general.clone());
+         }
+         let mut value = own.clone().unwrap_or_else(|| general.clone());
+@@ -1033,50 +996,50 @@ fn own<T: Clone>(ui: &mut egui::Ui, own: &mut Option<T>, general: &T, row: impl
+ }
+ 
+ fn rasterizer(ui: &mut egui::Ui, value: &mut bool) {
+-    ui.checkbox(value, "Draw the 3D on the GPU");
++    ui.checkbox(value, t("Draw the 3D on the GPU"));
+ }
+ 
+ fn resolution(ui: &mut egui::Ui, value: &mut u32) {
+-    ui.add(egui::Slider::new(value, 1..=8).text("Resolution").suffix("x"))
++    ui.add(egui::Slider::new(value, 1..=8).text(t("Resolution")).suffix("x"))
+         .on_hover_text("How many times the console's resolution the 3D is drawn at. Past what the window shows, the extra pixels smooth the edges, at a cost to the GPU that grows fast.");
+ }
+ 
+ fn texture_packs(ui: &mut egui::Ui, value: &mut bool) {
+-    ui.checkbox(value, "Texture packs")
++    ui.checkbox(value, t("Texture packs"))
+         .on_hover_text("Draw a game's texture pack, made for Citra or Azahar, put in the textures folder of the game's mods folder.");
+ }
+ 
+ fn interpolation(ui: &mut egui::Ui, value: &mut bool) {
+-    ui.checkbox(value, "Frame interpolation")
++    ui.checkbox(value, t("Frame interpolation"))
+         .on_hover_text("A game at 30 frames a second gets a picture drawn in between each two of its own, with everything halfway between where it was in both, so it moves at 60. The screens show a 60th of a second late. It takes the 3D drawn on the GPU and the Vulkan presenter.");
+ }
+ 
+ fn window_scale(ui: &mut egui::Ui, value: &mut u32) {
+-    ui.add(egui::Slider::new(value, 1..=6).text("Window scale"));
++    ui.add(egui::Slider::new(value, 1..=6).text(t("Window scale")));
+ }
+ 
+ fn screens(ui: &mut egui::Ui, value: &mut Screens) {
+-    egui::ComboBox::from_label("Screens").selected_text(value.name()).show_ui(ui, |ui| {
++    egui::ComboBox::from_label(t("Screens")).selected_text(t(value.name())).show_ui(ui, |ui| {
+         for layout in Screens::ALL {
+-            ui.selectable_value(value, layout, layout.name());
++            ui.selectable_value(value, layout, t(layout.name()));
+         }
+     });
+ }
+ 
+ fn rotation(ui: &mut egui::Ui, value: &mut Orientation) {
+-    egui::ComboBox::from_label("Rotation").selected_text(value.name()).show_ui(ui, |ui| {
++    egui::ComboBox::from_label(t("Rotation")).selected_text(t(value.name())).show_ui(ui, |ui| {
+         for orientation in Orientation::ALL {
+-            ui.selectable_value(value, orientation, orientation.name());
++            ui.selectable_value(value, orientation, t(orientation.name()));
+         }
+     });
+ }
+ 
+ fn filter(ui: &mut egui::Ui, value: &mut Filter) {
+-    egui::ComboBox::from_label("Filter")
+-        .selected_text(value.name())
++    egui::ComboBox::from_label(t("Filter"))
++        .selected_text(t(value.name()))
+         .show_ui(ui, |ui| {
+             for filter in Filter::ALL {
+-                ui.selectable_value(value, filter, filter.name());
++                ui.selectable_value(value, filter, t(filter.name()));
+             }
+         })
+         .response
+@@ -1084,15 +1047,15 @@ fn filter(ui: &mut egui::Ui, value: &mut Filter) {
+ }
+ 
+ fn integer_scale(ui: &mut egui::Ui, value: &mut bool) {
+-    ui.checkbox(value, "Scale by whole numbers only").on_hover_text("Every pixel gets the same size, with a border around the screens.");
++    ui.checkbox(value, t("Scale by whole numbers only")).on_hover_text("Every pixel gets the same size, with a border around the screens.");
+ }
+ 
+ fn top_shape(ui: &mut egui::Ui, value: &mut TopShape) {
+-    egui::ComboBox::from_label("Top screen shape")
+-        .selected_text(value.name())
++    egui::ComboBox::from_label(t("Top screen shape"))
++        .selected_text(t(value.name()))
+         .show_ui(ui, |ui| {
+             for shape in TopShape::ALL {
+-                ui.selectable_value(value, shape, shape.name());
++                ui.selectable_value(value, shape, t(shape.name()));
+             }
+         })
+         .response
+@@ -1100,11 +1063,11 @@ fn top_shape(ui: &mut egui::Ui, value: &mut TopShape) {
+ }
+ 
+ fn stereo_3d(ui: &mut egui::Ui, value: &mut Stereo3d) {
+-    egui::ComboBox::from_label("3D")
+-        .selected_text(value.name())
++    egui::ComboBox::from_label(t("3D"))
++        .selected_text(t(value.name()))
+         .show_ui(ui, |ui| {
+             for stereo in Stereo3d::ALL {
+-                ui.selectable_value(value, stereo, stereo.name());
++                ui.selectable_value(value, stereo, t(stereo.name()));
+             }
+         })
+         .response
+@@ -1112,25 +1075,33 @@ fn stereo_3d(ui: &mut egui::Ui, value: &mut Stereo3d) {
+ }
+ 
+ fn depth_3d(ui: &mut egui::Ui, value: &mut u32) {
+-    ui.add(egui::Slider::new(value, 0..=100).text("Depth").suffix("%")).on_hover_text("The console's 3D slider, how deep games draw the 3D.");
++    ui.add(egui::Slider::new(value, 0..=100).text(t("Depth")).suffix("%")).on_hover_text("The console's 3D slider, how deep games draw the 3D.");
+ }
+ 
+ fn language(ui: &mut egui::Ui, value: &mut Language) {
+-    egui::ComboBox::from_label("Language")
+-        .selected_text(value.name())
++    egui::ComboBox::from_label(t("Game language"))
++        .selected_text(t(value.name()))
+         .show_ui(ui, |ui| {
+             for language in Language::ALL {
+-                ui.selectable_value(value, language, language.name());
++                ui.selectable_value(value, language, t(language.name()));
+             }
+         })
+         .response
+         .on_hover_text("The console's system language, which titles pick their localised text and files by. It changes with the next game started, or Reset.");
+ }
+ 
++/// DBZ edition: a heading of the options, orange, with a line over it.
++fn section(ui: &mut egui::Ui, title: &str) {
++    ui.add_space(6.0);
++    ui.separator();
++    ui.label(RichText::new(title).size(19.0).strong().color(crate::gui::ORANGE));
++    ui.add_space(2.0);
++}
++
+ /// what runs the game's code.
+ fn code(ui: &mut egui::Ui, recompiled: &mut bool) {
+-    ui.radio_value(recompiled, true, "Recompiled code when there is some");
+-    ui.radio_value(recompiled, false, "Interpreter only");
++    ui.radio_value(recompiled, true, t("Recompiled code when there is some"));
++    ui.radio_value(recompiled, false, t("Interpreter only"));
+ }
+ 
+ /// a line a GameOverlay keeps over the game, in the bottom right corner.
+diff --git a/crates/zakuro/src/settings.rs b/crates/zakuro/src/settings.rs
+index 00946cc..6d777bf 100644
+--- a/crates/zakuro/src/settings.rs
++++ b/crates/zakuro/src/settings.rs
+@@ -570,6 +570,51 @@ pub struct Settings {
+     pub room_address: String,
+     pub room_name: String,
+     pub room_port: u16,
++    /// DBZ edition: the language of the menus, as the installer names it.
++    pub ui_language: String,
++    /// DBZ edition: controller buttons that touch the character cards.
++    pub touch: TouchButtons,
++}
++
++/// DBZ Extreme Butoden edition: controller buttons that, held, touch a
++/// point of the bottom screen, the cards of the team's other characters,
++/// which change to them or call them in as strikers.
++#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
++#[serde(default)]
++pub struct TouchButtons {
++    pub enabled: bool,
++    pub second: Button,
++    pub third: Button,
++    /// where each card is touched, in the bottom screen's 320x240 pixels.
++    pub second_at: (u16, u16),
++    pub third_at: (u16, u16),
++}
++
++impl Default for TouchButtons {
++    fn default() -> Self {
++        TouchButtons {
++            enabled: true,
++            second: Button::LeftTrigger2,
++            third: Button::RightTrigger2,
++            second_at: (161, 109),
++            third_at: (266, 109),
++        }
++    }
++}
++
++impl TouchButtons {
++    /// each button that touches, and where.
++    pub fn map(&self) -> Vec<(Button, (u16, u16))> {
++        if !self.enabled {
++            return Vec::new();
++        }
++        vec![(self.second, self.second_at), (self.third, self.third_at)]
++    }
++
++    /// whether button touches a card, rather than doing what it is bound to.
++    pub fn uses(&self, button: Button) -> bool {
++        self.enabled && button != Button::Unknown && (button == self.second || button == self.third)
++    }
+ }
+ 
+ impl Default for Settings {
+@@ -608,6 +653,8 @@ impl Default for Settings {
+             room_address: String::new(),
+             room_name: String::new(),
+             room_port: zakuro_core::room::DEFAULT_PORT,
++            ui_language: "en".to_owned(),
++            touch: TouchButtons::default(),
+         }
+     }
+ }
+diff --git a/crates/zakuro/src/tr.rs b/crates/zakuro/src/tr.rs
+new file mode 100644
+index 0000000..940dbe2
+--- /dev/null
++++ b/crates/zakuro/src/tr.rs
+@@ -0,0 +1,191 @@
++//! DBZ Extreme Butoden edition: the menus in the language the installer
++//! chose (settings.ui_language). Text missing from the table stays in
++//! English.
++
++use std::sync::atomic::{AtomicUsize, Ordering};
++
++/// 0 English, then the columns of TABLE: es, fr, de, it, ja, zh.
++static LANGUAGE: AtomicUsize = AtomicUsize::new(0);
++
++pub fn set_language(code: &str) {
++    let column = match code {
++        "es" => 1,
++        "fr" => 2,
++        "de" => 3,
++        "it" => 4,
++        "ja" => 5,
++        "zh" => 6,
++        _ => 0,
++    };
++    LANGUAGE.store(column, Ordering::Relaxed);
++}
++
++/// text in the menus' language.
++pub fn t(english: &'static str) -> &'static str {
++    let column = LANGUAGE.load(Ordering::Relaxed);
++    if column == 0 {
++        return english;
++    }
++    TABLE.iter().find(|(key, _)| *key == english).map_or(english, |(_, row)| row[column - 1])
++}
++
++/// the languages the menus come in, by code and name.
++pub const LANGUAGES: [(&str, &str); 7] =
++    [("es", "Español"), ("en", "English"), ("fr", "Français"), ("de", "Deutsch"), ("it", "Italiano"), ("ja", "日本語"), ("zh", "中文")];
++
++#[rustfmt::skip]
++const TABLE: &[(&str, [&str; 6])] = &[
++    // menu over the game
++    ("PAUSE", ["PAUSA", "PAUSE", "PAUSE", "PAUSA", "ポーズ", "暂停"]),
++    ("running its recompiled code", ["ejecutando código nativo recompilado", "exécute le code natif recompilé", "läuft mit rekompiliertem nativem Code", "esegue il codice nativo ricompilato", "リコンパイル済みネイティブコードで実行中", "正在运行重编译的原生代码"]),
++    ("interpreted", ["interpretado", "interprété", "interpretiert", "interpretato", "インタープリター実行", "解释执行"]),
++    ("Resume", ["Continuar", "Reprendre", "Fortsetzen", "Riprendi", "再開", "继续"]),
++    ("Reset", ["Reiniciar", "Redémarrer", "Neustart", "Riavvia", "リセット", "重置"]),
++    ("Fullscreen", ["Pantalla completa", "Plein écran", "Vollbild", "Schermo intero", "フルスクリーン", "全屏"]),
++    ("Slot ", ["Ranura ", "Emplacement ", "Platz ", "Slot ", "スロット ", "槽位 "]),
++    ("empty", ["vacía", "vide", "leer", "vuoto", "空き", "空"]),
++    ("Save state", ["Guardar estado", "Sauver l'état", "Zustand speichern", "Salva stato", "ステートセーブ", "保存状态"]),
++    ("Load state", ["Cargar estado", "Charger l'état", "Zustand laden", "Carica stato", "ステートロード", "读取状态"]),
++    ("F5 saves to this slot while playing.", ["F5 guarda en esta ranura mientras juegas.", "F5 sauvegarde dans cet emplacement en jeu.", "F5 speichert beim Spielen in diesen Platz.", "F5 salva in questo slot mentre giochi.", "プレイ中は F5 でこのスロットにセーブ。", "游戏中按 F5 保存到此槽位。"]),
++    ("F8 loads this slot while playing.", ["F8 carga esta ranura mientras juegas.", "F8 charge cet emplacement en jeu.", "F8 lädt beim Spielen diesen Platz.", "F8 carica questo slot mentre giochi.", "プレイ中は F8 でこのスロットをロード。", "游戏中按 F8 读取此槽位。"]),
++    ("Options", ["Opciones", "Options", "Optionen", "Opzioni", "オプション", "选项"]),
++    ("Options for this game", ["Opciones de este juego", "Options de ce jeu", "Optionen für dieses Spiel", "Opzioni di questo gioco", "このゲームのオプション", "本游戏选项"]),
++    ("Cheats", ["Trucos", "Codes de triche", "Cheats", "Trucchi", "チート", "金手指"]),
++    ("Online", ["Online", "En ligne", "Online", "Online", "オンライン", "在线"]),
++    ("Quit", ["Salir del juego", "Quitter le jeu", "Spiel beenden", "Esci dal gioco", "ゲームを終了", "退出游戏"]),
++    ("Menu language", ["Idioma del menú", "Langue du menu", "Menüsprache", "Lingua del menu", "メニューの言語", "菜单语言"]),
++    // settings
++    ("This game has options of its own, which go over these. They are in Options for this game, in the menu.", ["Este juego tiene opciones propias, que mandan sobre estas. Están en «Opciones de este juego», en el menú.", "Ce jeu a ses propres options, prioritaires sur celles-ci. Elles sont dans « Options de ce jeu », dans le menu.", "Dieses Spiel hat eigene Optionen, die diese überschreiben. Sie stehen unter „Optionen für dieses Spiel“ im Menü.", "Questo gioco ha opzioni proprie, che prevalgono su queste. Sono in «Opzioni di questo gioco», nel menu.", "このゲームには専用のオプションがあり、こちらより優先されます。メニューの「このゲームのオプション」にあります。", "本游戏有自己的选项，优先于这些设置。请在菜单的“本游戏选项”中查看。"]),
++    ("Graphics", ["Gráficos", "Graphismes", "Grafik", "Grafica", "グラフィック", "画面"]),
++    ("Game", ["Juego", "Jeu", "Spiel", "Gioco", "ゲーム", "游戏"]),
++    ("Sound", ["Sonido", "Son", "Ton", "Audio", "サウンド", "声音"]),
++    ("Interface", ["Interfaz", "Interface", "Oberfläche", "Interfaccia", "インターフェース", "界面"]),
++    ("Keyboard", ["Teclado", "Clavier", "Tastatur", "Tastiera", "キーボード", "键盘"]),
++    ("Controller", ["Mando", "Manette", "Controller", "Controller", "コントローラー", "手柄"]),
++    ("Presented with", ["Mostrado con", "Affiché avec", "Darstellung mit", "Visualizzato con", "描画方式", "显示方式"]),
++    ("Draw the 3D on the GPU", ["Dibujar el 3D con la GPU", "Dessiner la 3D avec le GPU", "3D mit der GPU zeichnen", "Disegna il 3D con la GPU", "3DをGPUで描画", "使用 GPU 绘制 3D"]),
++    ("Resolution", ["Resolución", "Résolution", "Auflösung", "Risoluzione", "解像度", "分辨率"]),
++    ("Texture packs", ["Packs de texturas", "Packs de textures", "Texturpakete", "Pacchetti di texture", "テクスチャパック", "材质包"]),
++    ("Frame interpolation", ["Interpolación de fotogramas", "Interpolation d'images", "Zwischenbildberechnung", "Interpolazione dei fotogrammi", "フレーム補間", "插帧"]),
++    ("Window scale", ["Tamaño de ventana", "Taille de la fenêtre", "Fenstergröße", "Dimensione finestra", "ウィンドウ倍率", "窗口缩放"]),
++    ("Screens", ["Pantallas", "Écrans", "Bildschirme", "Schermi", "画面配置", "屏幕布局"]),
++    ("Rotation", ["Rotación", "Rotation", "Drehung", "Rotazione", "回転", "旋转"]),
++    ("Filter", ["Filtro", "Filtre", "Filter", "Filtro", "フィルター", "滤镜"]),
++    ("Scale by whole numbers only", ["Escalar solo por números enteros", "Mise à l'échelle entière uniquement", "Nur ganzzahlig skalieren", "Scala solo per numeri interi", "整数倍のみで拡大", "仅整数倍缩放"]),
++    ("Top screen shape", ["Formato de la pantalla superior", "Format de l'écran du haut", "Format des oberen Bildschirms", "Formato dello schermo superiore", "上画面の形", "上屏比例"]),
++    ("Depth", ["Profundidad", "Profondeur", "Tiefe", "Profondità", "奥行き", "深度"]),
++    ("Swap eyes", ["Intercambiar ojos", "Inverser les yeux", "Augen tauschen", "Scambia gli occhi", "左右の目を入れ替え", "交换左右眼"]),
++    ("F9 switches them while playing, F10 between the top and the bottom screen alone.", ["F9 cambia la disposición mientras juegas; F10 alterna entre solo la pantalla superior o la inferior.", "F9 change la disposition en jeu ; F10 alterne entre l'écran du haut ou du bas seul.", "F9 wechselt beim Spielen die Anordnung, F10 zwischen nur oberem oder unterem Bildschirm.", "F9 cambia la disposizione mentre giochi; F10 alterna tra solo schermo superiore o inferiore.", "プレイ中は F9 で配置を切り替え、F10 で上画面のみ／下画面のみを切り替え。", "游戏中按 F9 切换布局，F10 在仅上屏与仅下屏之间切换。"]),
++    ("The presenter changes the next time Zakuro starts, the 3D with the next game.", ["El modo de dibujo cambia al volver a abrir el juego; el 3D, en la siguiente partida.", "Le mode d'affichage change au prochain lancement ; la 3D, avec le prochain jeu.", "Die Darstellung ändert sich beim nächsten Start, das 3D mit dem nächsten Spiel.", "La modalità di visualizzazione cambia al prossimo avvio; il 3D con il prossimo gioco.", "描画方式は次回起動時、3Dは次のゲームから反映されます。", "显示方式在下次启动时生效，3D 在下一个游戏时生效。"]),
++    ("Game language", ["Idioma del juego", "Langue du jeu", "Spielsprache", "Lingua del gioco", "ゲームの言語", "游戏语言"]),
++    ("Recompiled code when there is some", ["Código nativo recompilado (recomendado)", "Code natif recompilé (recommandé)", "Rekompilierter nativer Code (empfohlen)", "Codice nativo ricompilato (consigliato)", "リコンパイル済みネイティブコード（推奨）", "重编译的原生代码（推荐）"]),
++    ("Interpreter only", ["Solo intérprete (más lento)", "Interpréteur seul (plus lent)", "Nur Interpreter (langsamer)", "Solo interprete (più lento)", "インタープリターのみ（低速）", "仅解释器（较慢）"]),
++    ("It changes with the next game started, or Reset.", ["Se aplica al reiniciar el juego.", "S'applique au redémarrage du jeu.", "Gilt nach einem Neustart des Spiels.", "Si applica al riavvio del gioco.", "ゲームのリセット後に反映されます。", "重置游戏后生效。"]),
++    ("Volume", ["Volumen", "Volume", "Lautstärke", "Volume", "音量", "音量"]),
++    ("Mute", ["Silenciar", "Muet", "Stumm", "Muto", "ミュート", "静音"]),
++    ("Show the frame rate", ["Mostrar los FPS", "Afficher les IPS", "Bildrate anzeigen", "Mostra gli FPS", "フレームレートを表示", "显示帧率"]),
++    ("press a key…", ["pulsa una tecla…", "appuyez sur une touche…", "Taste drücken…", "premi un tasto…", "キーを押してください…", "请按键…"]),
++    ("press a button…", ["pulsa un botón…", "appuyez sur un bouton…", "Taste drücken…", "premi un pulsante…", "ボタンを押してください…", "请按按钮…"]),
++    ("Default controls", ["Teclas por defecto", "Touches par défaut", "Standardtasten", "Tasti predefiniti", "キー設定を初期化", "恢复默认按键"]),
++    ("Default controller", ["Mando por defecto", "Manette par défaut", "Controller-Standard", "Controller predefinito", "コントローラー設定を初期化", "恢复默认手柄"]),
++    ("Drag with the right mouse button to tilt the console, for games that use the motion sensors.", ["Arrastra con el botón derecho del ratón para inclinar la consola (sensores de movimiento).", "Faites glisser avec le clic droit pour incliner la console (capteurs de mouvement).", "Mit rechter Maustaste ziehen, um die Konsole zu neigen (Bewegungssensoren).", "Trascina col tasto destro del mouse per inclinare la console (sensori di movimento).", "右ドラッグで本体を傾けます（モーションセンサー対応ゲーム用）。", "按住鼠标右键拖动可倾斜主机（体感功能）。"]),
++    ("The circle pad is the left stick, and Home opens the menu over the game.", ["El stick izquierdo es el Circle Pad y el botón Home abre este menú.", "Le stick gauche est le Circle Pad et le bouton Home ouvre ce menu.", "Der linke Stick ist das Schiebepad, die Home-Taste öffnet dieses Menü.", "Lo stick sinistro è il Circle Pad e il tasto Home apre questo menu.", "左スティックがスライドパッド、Homeボタンでこのメニューを開きます。", "左摇杆为滑杆，Home 键打开此菜单。"]),
++    // combat controls
++    ("Combat controls", ["Controles de combate", "Commandes de combat", "Kampfsteuerung", "Comandi di combattimento", "バトル操作", "战斗操作"]),
++    ("Change character / striker with the controller", ["Cambiar de personaje / striker con el mando", "Changer de personnage / striker avec la manette", "Charakter / Striker mit dem Controller wechseln", "Cambia personaggio / striker col controller", "コントローラーでキャラ交代／ストライカー", "用手柄切换角色 / 援护"]),
++    ("2nd character", ["2.º personaje", "2e personnage", "2. Charakter", "2º personaggio", "2人目のキャラ", "第2名角色"]),
++    ("3rd character", ["3.er personaje", "3e personnage", "3. Charakter", "3º personaggio", "3人目のキャラ", "第3名角色"]),
++    ("Holding the button touches that character's card on the bottom screen, to change to them or call them in as a striker.", ["Al pulsar el botón se toca la carta de ese personaje en la pantalla inferior: así cambias a él o lo llamas como striker.", "Le bouton touche la carte de ce personnage sur l'écran du bas : pour changer ou l'appeler en striker.", "Die Taste berührt die Karte dieses Charakters auf dem unteren Bildschirm: zum Wechseln oder als Striker.", "Il pulsante tocca la carta di quel personaggio sullo schermo inferiore: per cambiare o chiamarlo come striker.", "ボタンで下画面のキャラカードをタッチし、交代またはストライカーとして呼び出します。", "按下按钮即触摸下屏对应角色卡，用于切换角色或呼叫援护。"]),
++    ("Default combat controls", ["Controles de combate por defecto", "Commandes de combat par défaut", "Standard-Kampfsteuerung", "Comandi di combattimento predefiniti", "バトル操作を初期化", "恢复默认战斗操作"]),
++    // game's own settings
++    ("Options for", ["Opciones de", "Options de", "Optionen für", "Opzioni di", "オプション:", "选项："]),
++    ("Tick what this game is to have of its own. The rest follows the general settings.", ["Marca lo que este juego tendrá propio. El resto sigue las opciones generales.", "Cochez ce que ce jeu aura en propre. Le reste suit les options générales.", "Hake an, was dieses Spiel eigen haben soll. Der Rest folgt den allgemeinen Optionen.", "Spunta ciò che questo gioco avrà di proprio. Il resto segue le opzioni generali.", "このゲーム専用にする項目にチェック。それ以外は共通設定に従います。", "勾选本游戏单独使用的设置，其余沿用通用设置。"]),
++    ("Where the 3D is drawn, its resolution, the texture packs, the language and what runs the code change the next time the game starts, or with Reset.", ["El dibujo del 3D, la resolución, las texturas, el idioma y el tipo de código se aplican al reiniciar el juego.", "Le rendu 3D, la résolution, les textures, la langue et le type de code s'appliquent au redémarrage.", "3D-Darstellung, Auflösung, Texturen, Sprache und Codeart gelten nach einem Neustart.", "Rendering 3D, risoluzione, texture, lingua e tipo di codice si applicano al riavvio.", "3D描画・解像度・テクスチャ・言語・コードの種類はリセット後に反映されます。", "3D 绘制、分辨率、材质、语言和代码类型在重置后生效。"]),
++    ("Follow the general settings in everything", ["Usar las opciones generales en todo", "Suivre les options générales partout", "Überall den allgemeinen Optionen folgen", "Segui le opzioni generali in tutto", "すべて共通設定に戻す", "全部沿用通用设置"]),
++    ("This game's own, rather than the general setting.", ["Propio de este juego, en lugar del general.", "Propre à ce jeu, au lieu du général.", "Eigen für dieses Spiel statt allgemein.", "Proprio di questo gioco invece che generale.", "共通設定ではなくこのゲーム専用。", "仅本游戏使用，而非通用设置。"]),
++    // online
++    ("Online play with others goes through a room, which one of you opens and the others join over the internet. It uses the game's own local wireless battle.", ["El juego online funciona con salas: uno abre una sala y los demás se unen por internet. Usa el modo de combate inalámbrico local del propio juego.", "Le jeu en ligne passe par un salon : l'un l'ouvre, les autres le rejoignent par internet. Il utilise le combat sans fil local du jeu.", "Online-Spiel läuft über einen Raum: einer öffnet ihn, die anderen treten über das Internet bei. Es nutzt den lokalen Drahtlos-Kampf des Spiels.", "Il gioco online passa per una stanza: uno la apre e gli altri si uniscono via internet. Usa la battaglia wireless locale del gioco.", "オンラインはルームを使います。1人がルームを開き、他の人がインターネット経由で参加します。ゲーム本来のローカル通信対戦を使用します。", "在线游戏通过房间进行：一人创建房间，其他人通过互联网加入。使用游戏自带的本地无线对战。"]),
++    ("Nickname", ["Apodo", "Pseudo", "Spitzname", "Soprannome", "ニックネーム", "昵称"]),
++    ("In the room", ["En la sala", "Dans le salon", "Im Raum", "Nella stanza", "ルーム:", "所在房间"]),
++    ("playing", ["jugando a", "joue à", "spielt", "gioca a", "プレイ中:", "正在玩"]),
++    ("Close the room", ["Cerrar la sala", "Fermer le salon", "Raum schließen", "Chiudi la stanza", "ルームを閉じる", "关闭房间"]),
++    ("Leave the room", ["Salir de la sala", "Quitter le salon", "Raum verlassen", "Esci dalla stanza", "ルームから退出", "离开房间"]),
++    ("Join a room", ["Unirse a una sala", "Rejoindre un salon", "Einem Raum beitreten", "Unisciti a una stanza", "ルームに参加", "加入房间"]),
++    ("Address", ["Dirección", "Adresse", "Adresse", "Indirizzo", "アドレス", "地址"]),
++    ("Password", ["Contraseña", "Mot de passe", "Passwort", "Password", "パスワード", "密码"]),
++    ("none", ["ninguna", "aucun", "keins", "nessuna", "なし", "无"]),
++    ("Join", ["Unirse", "Rejoindre", "Beitreten", "Unisciti", "参加", "加入"]),
++    ("Open a room", ["Abrir una sala", "Ouvrir un salon", "Raum öffnen", "Apri una stanza", "ルームを開く", "创建房间"]),
++    ("Name", ["Nombre", "Nom", "Name", "Nome", "名前", "名称"]),
++    ("Port", ["Puerto", "Port", "Port", "Porta", "ポート", "端口"]),
++    ("The password above, when there is one, is the room's.", ["La contraseña de arriba, si la hay, será la de la sala.", "Le mot de passe ci-dessus, s'il y en a un, sera celui du salon.", "Das Passwort oben, falls vorhanden, gilt für den Raum.", "La password sopra, se presente, sarà quella della stanza.", "上のパスワードを入力した場合、それがルームのパスワードになります。", "上方填写的密码（如有）即为房间密码。"]),
++    ("Open", ["Abrir", "Ouvrir", "Öffnen", "Apri", "開く", "创建"]),
++    ("Others join with this computer's address and this port. Over the internet the router has to let the port through.", ["Los demás se unen con la dirección de este PC y este puerto. Por internet, el router tiene que dejar pasar ese puerto.", "Les autres rejoignent avec l'adresse de ce PC et ce port. Par internet, le routeur doit laisser passer ce port.", "Andere treten mit der Adresse dieses PCs und diesem Port bei. Über das Internet muss der Router den Port durchlassen.", "Gli altri si uniscono con l'indirizzo di questo PC e questa porta. Via internet il router deve lasciar passare la porta.", "他の人はこのPCのアドレスとこのポートで参加します。インターネット経由ではルーターでポートを開放してください。", "其他人使用本机地址和此端口加入。通过互联网时，路由器需要放行该端口。"]),
++    ("Open on port", ["Abierta en el puerto", "Ouvert sur le port", "Offen auf Port", "Aperta sulla porta", "開放ポート", "已在端口开放"]),
++    ("Leave", ["Salir", "Quitter", "Verlassen", "Esci", "退出", "离开"]),
++    // cheats
++    ("Enhancements", ["Mejoras", "Améliorations", "Verbesserungen", "Miglioramenti", "改善", "增强"]),
++    ("Add a cheat", ["Añadir truco", "Ajouter un code", "Cheat hinzufügen", "Aggiungi trucco", "チートを追加", "添加金手指"]),
++    ("Add", ["Añadir", "Ajouter", "Hinzufügen", "Aggiungi", "追加", "添加"]),
++    ("Reload", ["Recargar", "Recharger", "Neu laden", "Ricarica", "再読み込み", "重新载入"]),
++    ("Open the cheats folder", ["Abrir la carpeta de trucos", "Ouvrir le dossier des codes", "Cheat-Ordner öffnen", "Apri la cartella dei trucchi", "チートフォルダーを開く", "打开金手指文件夹"]),
++    ("No cheats yet. Add one below, or put the cheat file Citra or Azahar has for this game in the cheats folder.", ["Aún no hay trucos. Añade uno abajo o pon en la carpeta de trucos el archivo de trucos de Citra o Azahar para este juego.", "Pas encore de codes. Ajoutez-en un ci-dessous ou placez le fichier de codes de Citra ou Azahar dans le dossier.", "Noch keine Cheats. Füge unten einen hinzu oder lege die Cheat-Datei von Citra oder Azahar in den Ordner.", "Nessun trucco. Aggiungine uno sotto o metti il file trucchi di Citra o Azahar nella cartella.", "チートはまだありません。下で追加するか、Citra/Azahar 用のチートファイルをフォルダーに入れてください。", "暂无金手指。请在下方添加，或将 Citra/Azahar 的金手指文件放入文件夹。"]),
++    // other windows
++    ("Keyboard input", ["Teclado del juego", "Clavier du jeu", "Spieltastatur", "Tastiera del gioco", "文字入力", "文字输入"]),
++    ("OK", ["Aceptar", "OK", "OK", "OK", "OK", "确定"]),
++    ("fast forward", ["avance rápido", "avance rapide", "Schnellvorlauf", "avanti veloce", "早送り", "快进"]),
++    ("fps", ["FPS", "IPS", "FPS", "FPS", "FPS", "FPS"]),
++    // names of choices
++    ("Top over bottom", ["Superior sobre inferior", "Haut au-dessus du bas", "Oben über unten", "Superiore sopra inferiore", "上下に並べる", "上下排列"]),
++    ("Screens side by side", ["Pantallas lado a lado", "Écrans côte à côte", "Nebeneinander", "Schermi affiancati", "左右に並べる", "左右排列"]),
++    ("Top screen only", ["Solo pantalla superior", "Écran du haut seul", "Nur oberer Bildschirm", "Solo schermo superiore", "上画面のみ", "仅上屏"]),
++    ("Bottom screen only", ["Solo pantalla inferior", "Écran du bas seul", "Nur unterer Bildschirm", "Solo schermo inferiore", "下画面のみ", "仅下屏"]),
++    ("Big top screen, small bottom one", ["Superior grande, inferior pequeña", "Grand écran du haut, petit en bas", "Großer oberer, kleiner unterer", "Superiore grande, inferiore piccolo", "上画面を大きく、下画面を小さく", "上屏大、下屏小"]),
++    ("0 degree", ["0 grados", "0 degré", "0 Grad", "0 gradi", "0度", "0度"]),
++    ("90 degree", ["90 grados", "90 degrés", "90 Grad", "90 gradi", "90度", "90度"]),
++    ("180 degree", ["180 grados", "180 degrés", "180 Grad", "180 gradi", "180度", "180度"]),
++    ("270 degree", ["270 grados", "270 degrés", "270 Grad", "270 gradi", "270度", "270度"]),
++    ("Smooth", ["Suave", "Lisse", "Weich", "Morbido", "なめらか", "平滑"]),
++    ("Sharp", ["Nítido", "Net", "Scharf", "Nitido", "シャープ", "锐利"]),
++    ("Pixels", ["Píxeles", "Pixels", "Pixel", "Pixel", "ドット", "像素"]),
++    ("The console's, 5:3", ["La de la consola, 5:3", "Celui de la console, 5:3", "Wie die Konsole, 5:3", "Quello della console, 5:3", "本体と同じ 5:3", "主机原始 5:3"]),
++    ("Off", ["Desactivado", "Désactivé", "Aus", "Disattivato", "オフ", "关闭"]),
++    ("Red and cyan glasses", ["Gafas rojo y cian", "Lunettes rouge et cyan", "Rot-Cyan-Brille", "Occhiali rosso e ciano", "赤青メガネ", "红蓝眼镜"]),
++    ("Side by side", ["Lado a lado", "Côte à côte", "Nebeneinander", "Affiancato", "サイドバイサイド", "左右并排"]),
++    ("Side by side, half width", ["Lado a lado, media anchura", "Côte à côte, demi-largeur", "Nebeneinander, halbe Breite", "Affiancato, metà larghezza", "サイドバイサイド（半幅）", "左右并排（半宽）"]),
++    ("Alternate rows", ["Líneas alternas", "Lignes alternées", "Abwechselnde Zeilen", "Righe alternate", "ラインごと交互", "隔行交错"]),
++    ("Japanese", ["Japonés", "Japonais", "Japanisch", "Giapponese", "日本語", "日语"]),
++    ("English", ["Inglés", "Anglais", "Englisch", "Inglese", "英語", "英语"]),
++    ("French", ["Francés", "Français", "Französisch", "Francese", "フランス語", "法语"]),
++    ("German", ["Alemán", "Allemand", "Deutsch", "Tedesco", "ドイツ語", "德语"]),
++    ("Italian", ["Italiano", "Italien", "Italienisch", "Italiano", "イタリア語", "意大利语"]),
++    ("Spanish", ["Español", "Espagnol", "Spanisch", "Spagnolo", "スペイン語", "西班牙语"]),
++    ("Chinese (Simplified)", ["Chino (simplificado)", "Chinois (simplifié)", "Chinesisch (vereinfacht)", "Cinese (semplificato)", "中国語（簡体字）", "简体中文"]),
++    ("Korean", ["Coreano", "Coréen", "Koreanisch", "Coreano", "韓国語", "韩语"]),
++    ("Dutch", ["Neerlandés", "Néerlandais", "Niederländisch", "Olandese", "オランダ語", "荷兰语"]),
++    ("Portuguese", ["Portugués", "Portugais", "Portugiesisch", "Portoghese", "ポルトガル語", "葡萄牙语"]),
++    ("Russian", ["Ruso", "Russe", "Russisch", "Russo", "ロシア語", "俄语"]),
++    ("Chinese (Traditional)", ["Chino (tradicional)", "Chinois (traditionnel)", "Chinesisch (traditionell)", "Cinese (tradizionale)", "中国語（繁体字）", "繁体中文"]),
++    // console buttons in the binding grids
++    ("D-pad up", ["Cruceta arriba", "Croix haut", "Steuerkreuz oben", "Croce su", "十字ボタン上", "十字键上"]),
++    ("D-pad down", ["Cruceta abajo", "Croix bas", "Steuerkreuz unten", "Croce giù", "十字ボタン下", "十字键下"]),
++    ("D-pad left", ["Cruceta izquierda", "Croix gauche", "Steuerkreuz links", "Croce sinistra", "十字ボタン左", "十字键左"]),
++    ("D-pad right", ["Cruceta derecha", "Croix droite", "Steuerkreuz rechts", "Croce destra", "十字ボタン右", "十字键右"]),
++    ("Circle pad up", ["Circle Pad arriba", "Circle Pad haut", "Schiebepad oben", "Circle Pad su", "スライドパッド上", "滑杆上"]),
++    ("Circle pad down", ["Circle Pad abajo", "Circle Pad bas", "Schiebepad unten", "Circle Pad giù", "スライドパッド下", "滑杆下"]),
++    ("Circle pad left", ["Circle Pad izquierda", "Circle Pad gauche", "Schiebepad links", "Circle Pad sinistra", "スライドパッド左", "滑杆左"]),
++    ("Circle pad right", ["Circle Pad derecha", "Circle Pad droite", "Schiebepad rechts", "Circle Pad destra", "スライドパッド右", "滑杆右"]),
++];
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn every_row_is_filled_and_keys_are_unique() {
++        for (i, (key, row)) in TABLE.iter().enumerate() {
++            assert!(row.iter().all(|text| !text.is_empty()), "{key}");
++            assert!(!TABLE[..i].iter().any(|(other, _)| other == key), "{key} twice");
++        }
++    }
++}
+-- 
+2.43.0
+
+
+From 8e3ae3142a51d7de2971d1a5119a568daa383d10 Mon Sep 17 00:00:00 2001
+From: Extreme Fighters <noreply@example.com>
+Date: Mon, 9 Nov 2026 14:18:08 +0000
+Subject: [PATCH 2/3] Extreme Fighters 0.2.1: learn the card controls from the
+ controller itself, live indicator
+
+---
+ crates/zakuro/src/gamepad.rs  | 116 ++++++++++++++++++++++++++++++----
+ crates/zakuro/src/lib.rs      |  26 +++++---
+ crates/zakuro/src/menus.rs    |  23 +++++--
+ crates/zakuro/src/settings.rs |  25 +++++---
+ crates/zakuro/src/tr.rs       |   4 ++
+ 5 files changed, 163 insertions(+), 31 deletions(-)
+
+diff --git a/crates/zakuro/src/gamepad.rs b/crates/zakuro/src/gamepad.rs
+index 9e25a46..634ff6a 100644
+--- a/crates/zakuro/src/gamepad.rs
++++ b/crates/zakuro/src/gamepad.rs
+@@ -1,9 +1,11 @@
+ //! game controllers, any the system knows, read through gilrs.
+ 
++use std::collections::HashMap;
++
+ use gilrs::{Axis, Button, EventType, Gilrs};
+ use zakuro_core::services::hid::{InputState, PadState};
+ 
+-use crate::settings::{PadButtons, TouchButtons};
++use crate::settings::{PadButtons, RawControl, TouchButtons};
+ 
+ /// how far a stick has to lean before it counts, some rest a little off
+ /// center.
+@@ -14,6 +16,13 @@ pub struct Gamepads {
+     gilrs: Option<Gilrs>,
+     buttons: PadButtons,
+     touch: TouchButtons,
++    /// DBZ edition: the last value of every control by its raw code, which
++    /// tells apart triggers that a controller reports under the same name.
++    raw: HashMap<u32, f32>,
++    /// DBZ edition: the card whose control is being learned, and the first
++    /// value each axis had while learning.
++    learning: Option<(usize, HashMap<u32, f32>)>,
++    learned: Option<(usize, RawControl)>,
+ }
+ 
+ impl Gamepads {
+@@ -21,7 +30,7 @@ impl Gamepads {
+         let gilrs = Gilrs::new()
+             .inspect_err(|error| log::warn!("controllers are not available, {error}"))
+             .ok();
+-        Gamepads { gilrs, buttons, touch: TouchButtons::default() }
++        Gamepads { gilrs, buttons, touch: TouchButtons::default(), raw: HashMap::new(), learning: None, learned: None }
+     }
+ 
+     pub fn set_buttons(&mut self, buttons: PadButtons) {
+@@ -32,6 +41,21 @@ impl Gamepads {
+         self.touch = touch;
+     }
+ 
++    /// DBZ edition: learn the next control pulled for this card, none to
++    /// stop learning.
++    pub fn learn(&mut self, slot: Option<usize>) {
++        match slot {
++            Some(slot) if self.learning.as_ref().is_some_and(|(at, _)| *at == slot) => {}
++            Some(slot) => self.learning = Some((slot, HashMap::new())),
++            None => self.learning = None,
++        }
++    }
++
++    /// DBZ edition: the control learned, and for which card.
++    pub fn take_learned(&mut self) -> Option<(usize, RawControl)> {
++        self.learned.take()
++    }
++
+     /// takes in what the controllers did since the last call, and returns the
+     /// buttons pressed meanwhile.
+     pub fn poll(&mut self) -> Vec<Button> {
+@@ -39,7 +63,38 @@ impl Gamepads {
+         let Some(gilrs) = &mut self.gilrs else { return pressed };
+         while let Some(event) = gilrs.next_event() {
+             match event.event {
+-                EventType::ButtonPressed(button, _) => pressed.push(button),
++                EventType::ButtonPressed(button, code) => {
++                    let code = code.into_u32();
++                    self.raw.insert(code, 1.0);
++                    if let Some((slot, _)) = self.learning.take() {
++                        let label = match button {
++                            Button::Unknown => format!("#{code}"),
++                            known => button_name(known).to_owned(),
++                        };
++                        log::info!("learned {label} (code {code}) for card {}", slot + 2);
++                        self.learned = Some((slot, RawControl { code, dir: 0, rest: 0.0, label }));
++                    } else {
++                        pressed.push(button);
++                    }
++                }
++                EventType::ButtonReleased(_, code) => drop(self.raw.insert(code.into_u32(), 0.0)),
++                EventType::ButtonChanged(_, value, code) => drop(self.raw.insert(code.into_u32(), value)),
++                EventType::AxisChanged(axis, value, code) => {
++                    let code = code.into_u32();
++                    let before = self.raw.insert(code, value);
++                    // an axis is learned once it moved well away from where
++                    // it was, toward the side it moved to
++                    if let Some((slot, first)) = &mut self.learning {
++                        let rest = *first.entry(code).or_insert(before.unwrap_or(value));
++                        if (value - rest).abs() > 0.7 {
++                            let dir = if value > rest { 1 } else { -1 };
++                            let label = format!("{axis:?} {}", if dir > 0 { "+" } else { "-" });
++                            log::info!("learned {label} (code {code}) for card {}", *slot + 2);
++                            self.learned = Some((*slot, RawControl { code, dir, rest, label }));
++                            self.learning = None;
++                        }
++                    }
++                }
+                 EventType::Connected => {
+                     log::info!("controller connected, {}", gilrs.gamepad(event.id).name());
+                 }
+@@ -55,23 +110,62 @@ impl Gamepads {
+         self.gilrs.as_ref().is_some_and(|gilrs| gilrs.gamepads().any(|(_, pad)| pad.is_pressed(button)))
+     }
+ 
++    /// DBZ edition: whether a learned control is held.
++    fn raw_held(&self, control: &RawControl) -> bool {
++        let value = self.raw.get(&control.code).copied().unwrap_or(control.rest);
++        match control.dir {
++            0 => value > 0.5,
++            dir => (value - control.rest) * dir as f32 > 0.5,
++        }
++    }
++
++    /// DBZ edition: whether the second's and the third's card controls are
++    /// held now, for the touch and for the options to show.
++    pub fn touch_held(&self) -> [bool; 2] {
++        if !self.touch.enabled {
++            return [false; 2];
++        }
++        let held = |raw: &Option<RawControl>, button: Button| match raw {
++            Some(control) => self.raw_held(control),
++            None => self.holding(button),
++        };
++        [held(&self.touch.second_raw, self.touch.second), held(&self.touch.third_raw, self.touch.third)]
++    }
++
++    /// whether a controller button is taken by a card, which then does only
++    /// that.
++    fn touches(&self, pad: &gilrs::Gamepad, bound: Button) -> bool {
++        if !self.touch.enabled {
++            return false;
++        }
++        let learned = [&self.touch.second_raw, &self.touch.third_raw];
++        let code = pad.button_code(bound).map(|code| code.into_u32());
++        learned.iter().zip([self.touch.second, self.touch.third]).any(|(raw, button)| match raw {
++            Some(control) => code == Some(control.code),
++            None => bound == button && button != Button::Unknown,
++        })
++    }
++
+     /// what the controllers hold down, over what the keyboard does.
+     pub fn apply(&self, mut state: InputState) -> InputState {
+         let Some(gilrs) = &self.gilrs else { return state };
++        // DBZ edition: held, a card's control touches its character's card
++        // on the bottom screen, unless the mouse already touches it
++        if state.touch.is_none() {
++            let held = self.touch_held();
++            if held[0] {
++                state.touch = Some(self.touch.second_at);
++            } else if held[1] {
++                state.touch = Some(self.touch.third_at);
++            }
++        }
+         for (_, pad) in gilrs.gamepads() {
+             for (button, bound) in self.buttons.map() {
+                 // a button that touches a card does only that
+-                if pad.is_pressed(bound) && !self.touch.uses(bound) {
++                if pad.is_pressed(bound) && !self.touches(&pad, bound) {
+                     state.buttons.set(button, true);
+                 }
+             }
+-            // DBZ edition: held, it touches its character's card on the
+-            // bottom screen, unless the mouse already touches it
+-            if state.touch.is_none() {
+-                if let Some(&(_, at)) = self.touch.map().iter().find(|&&(button, _)| pad.is_pressed(button)) {
+-                    state.touch = Some(at);
+-                }
+-            }
+             // the d-pad of some controllers is a pair of axes
+             let dpad = [
+                 (PadState::RIGHT, pad.value(Axis::DPadX) > 0.5),
+diff --git a/crates/zakuro/src/lib.rs b/crates/zakuro/src/lib.rs
+index ade30c3..38638ef 100644
+--- a/crates/zakuro/src/lib.rs
++++ b/crates/zakuro/src/lib.rs
+@@ -873,14 +873,24 @@ impl App {
+     /// takes in the controllers' buttons, a binding waiting for one takes
+     /// it, and Home opens and closes the menu over the game.
+     fn poll_gamepads(&mut self) {
+-        for button in self.gamepads.poll() {
+-            if let Some(index) = self.menus.rebinding_touch.take() {
+-                match index {
+-                    0 => self.settings.touch.second = button,
+-                    _ => self.settings.touch.third = button,
+-                }
+-                self.apply_settings();
+-            } else if let Some(index) = self.menus.rebinding_pad.take() {
++        // DBZ edition: a card's control is learned from the controller itself
++        self.gamepads.learn(self.menus.rebinding_touch);
++        let pressed = self.gamepads.poll();
++        if let Some((slot, control)) = self.gamepads.take_learned() {
++            self.menus.rebinding_touch = None;
++            let other = if slot == 0 { &self.settings.touch.third_raw } else { &self.settings.touch.second_raw };
++            if other.as_ref().is_some_and(|other| other.code == control.code && other.dir == control.dir) {
++                self.menus.message = Some(tr::t("Both triggers of this controller send the same signal, so they can't be told apart. Put the controller in X-input mode (on most 8BitDo: the switch on the back to X, or hold X + Start while turning it on) and learn them again.").to_owned());
++            }
++            match slot {
++                0 => self.settings.touch.second_raw = Some(control),
++                _ => self.settings.touch.third_raw = Some(control),
++            }
++            self.apply_settings();
++        }
++        self.menus.touch_held = self.gamepads.touch_held();
++        for button in pressed {
++            if let Some(index) = self.menus.rebinding_pad.take() {
+                 if let Some((_, bound)) = self.settings.pad.all_mut().into_iter().nth(index) {
+                     *bound = button;
+                 }
+diff --git a/crates/zakuro/src/menus.rs b/crates/zakuro/src/menus.rs
+index f933dee..05df7a9 100644
+--- a/crates/zakuro/src/menus.rs
++++ b/crates/zakuro/src/menus.rs
+@@ -85,6 +85,8 @@ pub struct Menus {
+     /// DBZ edition: the touch button waiting for a controller button, 0 for
+     /// the second character's card, 1 for the third's.
+     pub rebinding_touch: Option<usize>,
++    /// DBZ edition: whether each card's control is held now, to show it.
++    pub touch_held: [bool; 2],
+     /// something to tell the user, until they close it.
+     pub message: Option<String>,
+     /// something to tell the user for a moment, over the game, and since
+@@ -705,18 +707,31 @@ impl Menus {
+                 section(ui, t("Combat controls"));
+                 ui.checkbox(&mut settings.touch.enabled, t("Change character / striker with the controller"));
+                 ui.add_enabled_ui(settings.touch.enabled, |ui| {
+-                    egui::Grid::new("combat").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+-                        for (i, (label, button)) in [(t("2nd character"), settings.touch.second), (t("3rd character"), settings.touch.third)].into_iter().enumerate() {
++                    egui::Grid::new("combat").num_columns(3).spacing([12.0, 6.0]).show(ui, |ui| {
++                        let rows = [
++                            (t("2nd character"), settings.touch.second_raw.as_ref().map(|raw| raw.label.clone()), settings.touch.second),
++                            (t("3rd character"), settings.touch.third_raw.as_ref().map(|raw| raw.label.clone()), settings.touch.third),
++                        ];
++                        for (i, (label, learned, button)) in rows.into_iter().enumerate() {
+                             ui.label(label);
+-                            let text = if self.rebinding_touch == Some(i) { t("press a button…") } else { button_name(button) };
+-                            if ui.add_sized([150.0, 24.0], egui::Button::new(text)).clicked() {
++                            let text = match (self.rebinding_touch == Some(i), learned) {
++                                (true, _) => t("pull the trigger…").to_owned(),
++                                (false, Some(learned)) => learned,
++                                (false, None) => button_name(button).to_owned(),
++                            };
++                            if ui.add_sized([150.0, 24.0], egui::Button::new(text)).on_hover_text(t("Click, then pull the trigger or press the button you want on the controller.")).clicked() {
+                                 self.rebinding_touch = Some(i);
+                                 self.rebinding = None;
+                                 self.rebinding_pad = None;
+                             }
++                            // lights up while the control is held, to check the controller
++                            let held = self.touch_held[i];
++                            let (dot, color) = if held { ("●", Color32::from_rgb(90, 220, 100)) } else { ("○", Color32::from_gray(120)) };
++                            ui.label(RichText::new(format!("{dot} {}", if held { t("detected") } else { "" })).color(color));
+                             ui.end_row();
+                         }
+                     });
++                    ui.ctx().request_repaint();
+                 });
+                 ui.label(RichText::new(t("Holding the button touches that character's card on the bottom screen, to change to them or call them in as a striker.")).weak());
+                 if ui.button(t("Default combat controls")).clicked() {
+diff --git a/crates/zakuro/src/settings.rs b/crates/zakuro/src/settings.rs
+index 6d777bf..31a6dd1 100644
+--- a/crates/zakuro/src/settings.rs
++++ b/crates/zakuro/src/settings.rs
+@@ -588,6 +588,21 @@ pub struct TouchButtons {
+     /// where each card is touched, in the bottom screen's 320x240 pixels.
+     pub second_at: (u16, u16),
+     pub third_at: (u16, u16),
++    /// the controls learned from the controller itself, which go over the
++    /// buttons above: some controllers report both triggers alike.
++    pub second_raw: Option<RawControl>,
++    pub third_raw: Option<RawControl>,
++}
++
++/// DBZ edition: a control as the controller itself reports it, its raw
++/// code, for an axis the side it is pulled to (0 for a button) and where it
++/// rests, and its name to show.
++#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
++pub struct RawControl {
++    pub code: u32,
++    pub dir: i8,
++    pub rest: f32,
++    pub label: String,
+ }
+ 
+ impl Default for TouchButtons {
+@@ -598,19 +613,13 @@ impl Default for TouchButtons {
+             third: Button::RightTrigger2,
+             second_at: (161, 109),
+             third_at: (266, 109),
++            second_raw: None,
++            third_raw: None,
+         }
+     }
+ }
+ 
+ impl TouchButtons {
+-    /// each button that touches, and where.
+-    pub fn map(&self) -> Vec<(Button, (u16, u16))> {
+-        if !self.enabled {
+-            return Vec::new();
+-        }
+-        vec![(self.second, self.second_at), (self.third, self.third_at)]
+-    }
+-
+     /// whether button touches a card, rather than doing what it is bound to.
+     pub fn uses(&self, button: Button) -> bool {
+         self.enabled && button != Button::Unknown && (button == self.second || button == self.third)
+diff --git a/crates/zakuro/src/tr.rs b/crates/zakuro/src/tr.rs
+index 940dbe2..213e63b 100644
+--- a/crates/zakuro/src/tr.rs
++++ b/crates/zakuro/src/tr.rs
+@@ -97,6 +97,10 @@ const TABLE: &[(&str, [&str; 6])] = &[
+     ("3rd character", ["3.er personaje", "3e personnage", "3. Charakter", "3º personaggio", "3人目のキャラ", "第3名角色"]),
+     ("Holding the button touches that character's card on the bottom screen, to change to them or call them in as a striker.", ["Al pulsar el botón se toca la carta de ese personaje en la pantalla inferior: así cambias a él o lo llamas como striker.", "Le bouton touche la carte de ce personnage sur l'écran du bas : pour changer ou l'appeler en striker.", "Die Taste berührt die Karte dieses Charakters auf dem unteren Bildschirm: zum Wechseln oder als Striker.", "Il pulsante tocca la carta di quel personaggio sullo schermo inferiore: per cambiare o chiamarlo come striker.", "ボタンで下画面のキャラカードをタッチし、交代またはストライカーとして呼び出します。", "按下按钮即触摸下屏对应角色卡，用于切换角色或呼叫援护。"]),
+     ("Default combat controls", ["Controles de combate por defecto", "Commandes de combat par défaut", "Standard-Kampfsteuerung", "Comandi di combattimento predefiniti", "バトル操作を初期化", "恢复默认战斗操作"]),
++    ("pull the trigger…", ["aprieta el gatillo…", "appuyez sur la gâchette…", "Abzug drücken…", "premi il grilletto…", "トリガーを押してください…", "请按扳机键…"]),
++    ("Click, then pull the trigger or press the button you want on the controller.", ["Haz clic y luego aprieta en el mando el gatillo o botón que quieras.", "Cliquez, puis appuyez sur la gâchette ou le bouton voulu de la manette.", "Klicken, dann den gewünschten Abzug oder Knopf am Controller drücken.", "Fai clic, poi premi sul controller il grilletto o il pulsante che vuoi.", "クリックしてから、使いたいトリガーかボタンを押してください。", "点击后，在手柄上按下想要的扳机键或按钮。"]),
++    ("detected", ["detectado", "détecté", "erkannt", "rilevato", "検出", "已检测"]),
++    ("Both triggers of this controller send the same signal, so they can't be told apart. Put the controller in X-input mode (on most 8BitDo: the switch on the back to X, or hold X + Start while turning it on) and learn them again.", ["Los dos gatillos de este mando envían la misma señal y no se pueden distinguir. Pon el mando en modo X-input (en la mayoría de 8BitDo: el interruptor de atrás en X, o mantén X + Start al encenderlo) y vuelve a asignarlos.", "Les deux gâchettes de cette manette envoient le même signal et ne peuvent pas être distinguées. Passez la manette en mode X-input (sur la plupart des 8BitDo : l'interrupteur arrière sur X, ou maintenez X + Start à l'allumage) et réassignez-les.", "Beide Abzüge dieses Controllers senden dasselbe Signal und sind nicht unterscheidbar. Stelle den Controller auf X-Input (bei den meisten 8BitDo: Schalter hinten auf X, oder X + Start beim Einschalten halten) und lerne sie neu.", "I due grilletti di questo controller inviano lo stesso segnale e non si possono distinguere. Metti il controller in modalità X-input (sulla maggior parte degli 8BitDo: interruttore posteriore su X, o tieni X + Start all'accensione) e riassegnali.", "このコントローラーは左右のトリガーが同じ信号を送るため区別できません。X-inputモードにして（多くの8BitDoでは背面スイッチをX、または電源オン時にX+Startを長押し）、もう一度設定してください。", "此手柄的两个扳机键发送相同信号，无法区分。请将手柄切换到 X-input 模式（多数 8BitDo：背面开关拨到 X，或开机时按住 X + Start），然后重新设置。"]),
+     // game's own settings
+     ("Options for", ["Opciones de", "Options de", "Optionen für", "Opzioni di", "オプション:", "选项："]),
+     ("Tick what this game is to have of its own. The rest follows the general settings.", ["Marca lo que este juego tendrá propio. El resto sigue las opciones generales.", "Cochez ce que ce jeu aura en propre. Le reste suit les options générales.", "Hake an, was dieses Spiel eigen haben soll. Der Rest folgt den allgemeinen Optionen.", "Spunta ciò che questo gioco avrà di proprio. Il resto segue le opzioni generali.", "このゲーム専用にする項目にチェック。それ以外は共通設定に従います。", "勾选本游戏单独使用的设置，其余沿用通用设置。"]),
+-- 
+2.43.0
+
+
+From e904c3e353303439aca7b9bb7fdd4423b4c69cdc Mon Sep 17 00:00:00 2001
+From: Extreme Fighters <noreply@example.com>
+Date: Mon, 9 Nov 2026 14:31:00 +0000
+Subject: [PATCH 3/3] Extreme Fighters 0.3.0: full top screen with small bottom
+ overlay, graphics quality presets, public room list and room server
+
+---
+ Cargo.lock                            |   9 ++
+ Cargo.toml                            |   1 +
+ crates/ef-servidor/Cargo.toml         |  11 +++
+ crates/ef-servidor/examples/probar.rs |  15 ++++
+ crates/ef-servidor/src/main.rs        | 121 ++++++++++++++++++++++++++
+ crates/zakuro-gpu/src/backend/mod.rs  |  12 +++
+ crates/zakuro/src/lib.rs              |  29 +++++-
+ crates/zakuro/src/lobby.rs            |  83 ++++++++++++++++++
+ crates/zakuro/src/menus.rs            |  87 ++++++++++++++++++
+ crates/zakuro/src/settings.rs         |  20 ++++-
+ crates/zakuro/src/tr.rs               |  18 ++++
+ 11 files changed, 400 insertions(+), 6 deletions(-)
+ create mode 100644 crates/ef-servidor/Cargo.toml
+ create mode 100644 crates/ef-servidor/examples/probar.rs
+ create mode 100644 crates/ef-servidor/src/main.rs
+ create mode 100644 crates/zakuro/src/lobby.rs
+
+diff --git a/Cargo.lock b/Cargo.lock
+index a2096c7..3f5b443 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -1162,6 +1162,15 @@ dependencies = [
+  "emath",
+ ]
+ 
++[[package]]
++name = "ef-servidor"
++version = "0.3.0"
++dependencies = [
++ "env_logger",
++ "log",
++ "zakuro-core",
++]
++
+ [[package]]
+ name = "egui"
+ version = "0.36.2"
+diff --git a/Cargo.toml b/Cargo.toml
+index 12376aa..b0083e5 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -7,6 +7,7 @@ members = [
+     "crates/zakuro-gpu",
+     "crates/zakuro-core",
+     "crates/zakuro",
++    "crates/ef-servidor",
+ ]
+ 
+ [workspace.package]
+diff --git a/crates/ef-servidor/Cargo.toml b/crates/ef-servidor/Cargo.toml
+new file mode 100644
+index 0000000..a49a565
+--- /dev/null
++++ b/crates/ef-servidor/Cargo.toml
+@@ -0,0 +1,11 @@
++[package]
++name = "ef-servidor"
++version = "0.3.0"
++edition.workspace = true
++license.workspace = true
++description = "Extreme Fighters: servidor de salas online con lista publica"
++
++[dependencies]
++zakuro-core.workspace = true
++log.workspace = true
++env_logger = "0.11"
+diff --git a/crates/ef-servidor/examples/probar.rs b/crates/ef-servidor/examples/probar.rs
+new file mode 100644
+index 0000000..60aa55a
+--- /dev/null
++++ b/crates/ef-servidor/examples/probar.rs
+@@ -0,0 +1,15 @@
++//! prueba: une dos jugadores a una sala del servidor y muestra los miembros.
++use zakuro_core::room::Connection;
++fn main() {
++    let address = std::env::args().nth(1).unwrap_or("127.0.0.1:24873".into());
++    let a = Connection::join(&address, "Goku", "").expect("join a");
++    let b = Connection::join(&address, "Vegeta", "").expect("join b");
++    a.playing("DBZ: Extreme Butoden");
++    std::thread::sleep(std::time::Duration::from_millis(600));
++    println!("sala: {}  miembros vistos por B: {:?}", b.room(), b.members().iter().map(|m| (&m.nickname, &m.game)).collect::<Vec<_>>());
++    let (la, lb) = (a.link(), b.link());
++    la.send(lb.mac(), b"kamehameha".to_vec());
++    std::thread::sleep(std::time::Duration::from_millis(400));
++    println!("B recibe: {:?}", lb.receive().iter().map(|(_, body)| String::from_utf8_lossy(body).into_owned()).collect::<Vec<_>>());
++    std::thread::sleep(std::time::Duration::from_secs(3));
++}
+diff --git a/crates/ef-servidor/src/main.rs b/crates/ef-servidor/src/main.rs
+new file mode 100644
+index 0000000..849fbca
+--- /dev/null
++++ b/crates/ef-servidor/src/main.rs
+@@ -0,0 +1,121 @@
++//! Extreme Fighters: servidor de salas online.
++//!
++//! Mantiene abiertas varias salas de Zakuro (las mismas que abre un jugador
++//! desde "Online") y publica su lista para que el juego la muestre y cada
++//! uno se una con un clic. Como todos se conectan a este servidor, los
++//! jugadores no tienen que abrir puertos en su router: solo este equipo.
++//!
++//! Uso:
++//!   ef-servidor [--salas 6] [--puerto 24873] [--puerto-lista 24872]
++//!               [--nombre "Sala"] [--jugadores 2] [--contrasena ""]
++//!
++//! Abre las salas en los puertos 24873, 24874, ... y la lista en 24872.
++//! En el router o el cortafuegos del servidor hay que dejar pasar esos
++//! puertos TCP. La lista se puede ver en el navegador: http://IP:24872/
++
++use std::io::{Read, Write};
++use std::net::{TcpListener, TcpStream};
++use std::time::Duration;
++
++use zakuro_core::room::{Server, DEFAULT_PORT};
++
++/// la primera linea de la lista, para que el juego sepa que es un servidor
++/// de Extreme Fighters y de que version.
++const HEADER: &str = "EXTREME-FIGHTERS-SALAS 1";
++
++struct Options {
++    rooms: usize,
++    port: u16,
++    list_port: u16,
++    name: String,
++    most: usize,
++    password: String,
++}
++
++fn options() -> Result<Options, String> {
++    let mut options = Options { rooms: 6, port: DEFAULT_PORT, list_port: DEFAULT_PORT - 1, name: "Sala".into(), most: 2, password: String::new() };
++    let mut args = std::env::args().skip(1);
++    while let Some(arg) = args.next() {
++        let mut value = || args.next().ok_or(format!("{arg} necesita un valor"));
++        match arg.as_str() {
++            "--salas" => options.rooms = value()?.parse().map_err(|_| "--salas: numero no valido")?,
++            "--puerto" => options.port = value()?.parse().map_err(|_| "--puerto: numero no valido")?,
++            "--puerto-lista" => options.list_port = value()?.parse().map_err(|_| "--puerto-lista: numero no valido")?,
++            "--nombre" => options.name = value()?,
++            "--jugadores" => options.most = value()?.parse().map_err(|_| "--jugadores: numero no valido")?,
++            "--contrasena" => options.password = value()?,
++            "-h" | "--help" | "--ayuda" => {
++                println!("ef-servidor [--salas 6] [--puerto 24873] [--puerto-lista 24872] [--nombre Sala] [--jugadores 2] [--contrasena X]");
++                std::process::exit(0);
++            }
++            other => return Err(format!("opcion desconocida: {other}")),
++        }
++    }
++    options.rooms = options.rooms.clamp(1, 64);
++    options.most = options.most.clamp(2, 16);
++    Ok(options)
++}
++
++/// un texto sin tabuladores ni saltos de linea, que separan los campos.
++fn field(text: &str) -> String {
++    text.chars().map(|c| if c == '\t' || c == '\n' || c == '\r' { ' ' } else { c }).collect()
++}
++
++fn answer(mut stream: TcpStream, rooms: &[(String, Server)], most: usize) {
++    let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
++    let _ = stream.set_write_timeout(Some(Duration::from_secs(3)));
++    // la peticion no importa, solo se lee para no cortar al que la envia
++    let mut request = [0u8; 2048];
++    let _ = stream.read(&mut request);
++    let mut body = format!("{HEADER}\n");
++    for (name, server) in rooms {
++        let members = server.members();
++        let game = members.iter().map(|member| member.game.as_str()).find(|game| !game.is_empty()).unwrap_or("");
++        body.push_str(&format!("{}\t{}\t{}\t{}\t{}\n", server.port(), members.len(), most, field(name), field(game)));
++    }
++    let response = format!(
++        "HTTP/1.0 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n{body}",
++        body.len()
++    );
++    let _ = stream.write_all(response.as_bytes());
++}
++
++fn main() {
++    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
++    let options = match options() {
++        Ok(options) => options,
++        Err(error) => {
++            eprintln!("{error}");
++            std::process::exit(2);
++        }
++    };
++    let mut rooms = Vec::new();
++    for i in 0..options.rooms {
++        let name = format!("{} {}", options.name, i + 1);
++        let port = options.port + i as u16;
++        match Server::start(port, &name, &options.password, options.most) {
++            Ok(server) => rooms.push((name, server)),
++            Err(error) => {
++                eprintln!("no se pudo abrir la sala {name} en el puerto {port}: {error}");
++                std::process::exit(1);
++            }
++        }
++    }
++    let listener = match TcpListener::bind(("0.0.0.0", options.list_port)) {
++        Ok(listener) => listener,
++        Err(error) => {
++            eprintln!("no se pudo abrir la lista en el puerto {}: {error}", options.list_port);
++            std::process::exit(1);
++        }
++    };
++    let last = options.port + options.rooms as u16 - 1;
++    println!("Extreme Fighters - servidor de salas");
++    println!("  {} salas de hasta {} jugadores, puertos {}-{}", options.rooms, options.most, options.port, last);
++    println!("  lista en el puerto {}  (http://<tu IP>:{}/)", options.list_port, options.list_port);
++    println!("  Deja pasar los puertos TCP {}-{} en el router o cortafuegos.", options.list_port, last);
++    println!("  En el juego: Online > Salas publicas > Servidor: <tu IP o dominio>");
++    println!("  Ctrl+C para cerrar.");
++    for stream in listener.incoming().flatten() {
++        answer(stream, &rooms, options.most);
++    }
++}
+diff --git a/crates/zakuro-gpu/src/backend/mod.rs b/crates/zakuro-gpu/src/backend/mod.rs
+index c0c674a..c72ce52 100644
+--- a/crates/zakuro-gpu/src/backend/mod.rs
++++ b/crates/zakuro-gpu/src/backend/mod.rs
+@@ -103,6 +103,10 @@ pub enum ScreenLayout {
+     BottomOnly,
+     /// the top screen big, the bottom one small at its lower right.
+     LargeTop,
++    /// DBZ edition: the top screen as big as the window lets it, the bottom
++    /// one over it in a lower corner, percent of the top screen's height
++    /// tall, on the left when left says so.
++    Overlay { percent: u8, left: bool },
+ }
+ 
+ /// the Orientation of both screens. north is up
+@@ -170,6 +174,7 @@ impl ScreenLayout {
+             ScreenLayout::TopOnly => (top_width, 240.0),
+             ScreenLayout::BottomOnly => (320.0, 240.0),
+             ScreenLayout::LargeTop => (top_width + LARGE_TOP_BOTTOM.0 as f32, 240.0),
++            ScreenLayout::Overlay { .. } => (top_width, 240.0),
+         }
+     }
+ }
+@@ -231,6 +236,13 @@ pub fn layout(window_width: u32, window_height: u32, arrangement: ScreenLayout,
+                 height: 240.0 * small,
+             })
+         }
++        ScreenLayout::Overlay { percent, left } => {
++            let height = 240.0 * scale * (percent.clamp(10, 60) as f32 / 100.0);
++            let width = height * 320.0 / 240.0;
++            let margin = 240.0 * scale * 0.015;
++            let x = if left { margin } else { top_w * scale - width - margin };
++            Some(Viewport { x, y: 240.0 * scale - height - margin, width, height })
++        }
+         ScreenLayout::TopOnly => None,
+         ScreenLayout::BottomOnly => Some(Viewport {
+             x: 0.0,
+diff --git a/crates/zakuro/src/lib.rs b/crates/zakuro/src/lib.rs
+index 38638ef..72c8068 100644
+--- a/crates/zakuro/src/lib.rs
++++ b/crates/zakuro/src/lib.rs
+@@ -9,6 +9,7 @@ mod gamepad;
+ mod gui;
+ mod input;
+ mod library;
++mod lobby;
+ mod menus;
+ mod present;
+ mod recompile;
+@@ -105,6 +106,7 @@ pub fn run_with(linked: Option<Linked>, overlay: Option<Box<dyn GameOverlay>>) {
+         },
+         scale: options.scale.unwrap_or(settings.scale).max(1),
+         layout: settings.layout,
++        overlay_hidden: false,
+         orientation: settings.orientation,
+         top_shape: settings.top_shape,
+         options,
+@@ -417,6 +419,8 @@ struct App {
+     scale: u32,
+     /// how the screens are arranged.
+     layout: Screens,
++    /// DBZ edition: the bottom screen over the top one hidden for now, F10.
++    overlay_hidden: bool,
+     orientation: Orientation,
+     /// how wide the top screen shows.
+     top_shape: settings::TopShape,
+@@ -544,7 +548,7 @@ impl ApplicationHandler for App {
+         match backend {
+             Ok((window, mut backend)) => {
+                 log::info!("presenting with the {} backend", backend.name());
+-                backend.set_layout(self.layout.screens());
++                backend.set_layout(self.screen_layout());
+                 backend.set_orientation(self.orientation.screen_orientation());
+                 backend.set_top_width(self.active.top_shape.width());
+                 backend.set_scaling(self.active.filter.screens(), self.active.integer_scale);
+@@ -853,6 +857,10 @@ impl App {
+                     log::info!("{}", if self.paused { "paused" } else { "resumed" });
+                 }
+                 KeyCode::F9 => self.set_layout(self.active.layout.next()),
++                KeyCode::F10 if self.active.layout == Screens::TopOverlay => {
++                    self.overlay_hidden = !self.overlay_hidden;
++                    self.apply_layout();
++                }
+                 KeyCode::F10 if self.active.layout.other_screen() != self.active.layout => self.set_layout(self.active.layout.other_screen()),
+                 KeyCode::F11 => self.toggle_fullscreen(),
+                 KeyCode::F5 if self.game.is_some() => self.save_state(),
+@@ -911,7 +919,7 @@ impl App {
+     fn touch(&mut self) {
+         let Some(window) = &self.window else { return };
+         let size = window.inner_size();
+-        let (_, bottom) = layout(size.width, size.height, self.layout.screens(), self.orientation.screen_orientation(), self.top_shape.width(), self.active.integer_scale);
++        let (_, bottom) = layout(size.width, size.height, self.screen_layout(), self.orientation.screen_orientation(), self.top_shape.width(), self.active.integer_scale);
+         // with the top screen alone there is nothing to touch
+         let Some(bottom) = bottom else {
+             self.keyboard.touch(None);
+@@ -1025,6 +1033,15 @@ impl App {
+ 
+     /// puts the screens' arrangement and the window scale to use, sizing
+     /// the window to them.
++    /// DBZ edition: how the screens go now, the size and side of the
++    /// bottom screen over the top one included, and hidden while F10 says.
++    fn screen_layout(&self) -> zakuro_gpu::ScreenLayout {
++        if self.layout == Screens::TopOverlay && self.overlay_hidden {
++            return zakuro_gpu::ScreenLayout::TopOnly;
++        }
++        self.layout.screens(self.settings.overlay_size, self.settings.overlay_left)
++    }
++
+     fn apply_layout(&mut self) {
+         if let Some(backend) = &mut self.backend {
+             backend.set_top_width(self.active.top_shape.width());
+@@ -1038,7 +1055,6 @@ impl App {
+             self.orientation = self.active.orientation;
+             self.top_shape = self.active.top_shape;
+             if let Some(backend) = &mut self.backend {
+-                backend.set_layout(self.layout.screens());
+                 backend.set_orientation(self.orientation.screen_orientation());
+             }
+             // a full screen or maximized window keeps its size, resizing
+@@ -1051,11 +1067,15 @@ impl App {
+                 _ => {}
+             }
+         }
++        let arrangement = self.screen_layout();
++        if let Some(backend) = &mut self.backend {
++            backend.set_layout(arrangement);
++        }
+     }
+ 
+     /// the window size that fits the screens at the chosen scale.
+     fn window_size(&self) -> winit::dpi::Size {
+-        let (width, height) = self.layout.screens().size(self.top_shape.width());
++        let (width, height) = self.screen_layout().size(self.top_shape.width());
+         let (width, height) = match self.orientation.screen_orientation().is_portrait() {
+             true => (height, width),
+             false => (width, height)
+@@ -1207,6 +1227,7 @@ impl App {
+             Action::SaveState => self.save_state(),
+             Action::LoadState => self.load_state(),
+             Action::HostRoom => self.host_room(),
++            Action::JoinRoomAt(address) => self.join_room(&address),
+             Action::JoinRoom => {
+                 let address = self.settings.room_address.clone();
+                 self.join_room(&address);
+diff --git a/crates/zakuro/src/lobby.rs b/crates/zakuro/src/lobby.rs
+new file mode 100644
+index 0000000..d0f816d
+--- /dev/null
++++ b/crates/zakuro/src/lobby.rs
+@@ -0,0 +1,83 @@
++//! Extreme Fighters: the list of public rooms an Extreme Fighters room
++//! server (ef-servidor) keeps open, so that joining one takes a click.
++
++use std::io::{Read, Write};
++use std::net::{TcpStream, ToSocketAddrs};
++use std::time::Duration;
++
++/// the list's port unless the address says another, the one before rooms'.
++pub const LIST_PORT: u16 = zakuro_core::room::DEFAULT_PORT - 1;
++const HEADER: &str = "EXTREME-FIGHTERS-SALAS";
++
++#[derive(Debug, Clone, PartialEq)]
++pub struct LobbyRoom {
++    pub name: String,
++    /// where to join it, the server's host and the room's port.
++    pub address: String,
++    pub players: usize,
++    pub most: usize,
++    /// the game played in it, empty while nobody plays.
++    pub game: String,
++}
++
++/// the host of an address and its port, the list's when it has none.
++fn split(server: &str) -> (String, u16) {
++    let server = server.trim().trim_start_matches("http://").trim_end_matches('/');
++    if let Some((host, port)) = server.rsplit_once(':').filter(|(host, _)| !host.contains(':') || host.starts_with('[')) {
++        if let Ok(port) = port.parse() {
++            return (host.to_owned(), port);
++        }
++    }
++    (server.to_owned(), LIST_PORT)
++}
++
++/// asks the server at address for its rooms.
++pub fn fetch(server: &str) -> Result<Vec<LobbyRoom>, String> {
++    let (host, port) = split(server);
++    if host.is_empty() {
++        return Err("no server".into());
++    }
++    let address = (host.as_str(), port).to_socket_addrs().map_err(|error| error.to_string())?.next().ok_or("no address")?;
++    let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(5)).map_err(|error| error.to_string())?;
++    stream.set_read_timeout(Some(Duration::from_secs(5))).map_err(|error| error.to_string())?;
++    stream.write_all(format!("GET / HTTP/1.0\r\nHost: {host}\r\n\r\n").as_bytes()).map_err(|error| error.to_string())?;
++    let mut text = String::new();
++    stream.read_to_string(&mut text).map_err(|error| error.to_string())?;
++    let body = text.split_once("\r\n\r\n").map_or(text.as_str(), |(_, body)| body);
++    parse(body, &host)
++}
++
++fn parse(body: &str, host: &str) -> Result<Vec<LobbyRoom>, String> {
++    let mut lines = body.lines();
++    if !lines.next().is_some_and(|first| first.starts_with(HEADER)) {
++        return Err("not an Extreme Fighters room server".into());
++    }
++    Ok(lines
++        .filter_map(|line| {
++            let mut fields = line.split('\t');
++            let port: u16 = fields.next()?.parse().ok()?;
++            let players = fields.next()?.parse().ok()?;
++            let most = fields.next()?.parse().ok()?;
++            let name = fields.next()?.to_owned();
++            let game = fields.next().unwrap_or("").to_owned();
++            Some(LobbyRoom { name, address: format!("{host}:{port}"), players, most, game })
++        })
++        .collect())
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn addresses_and_lists_are_read() {
++        assert_eq!(split("example.com"), ("example.com".into(), LIST_PORT));
++        assert_eq!(split("1.2.3.4:9000"), ("1.2.3.4".into(), 9000));
++        assert_eq!(split("http://example.com:24872/"), ("example.com".into(), 24872));
++        let rooms = parse("EXTREME-FIGHTERS-SALAS 1\n24873\t1\t2\tSala 1\tDBZ\n24874\t0\t2\tSala 2\t\n", "h").unwrap();
++        assert_eq!(rooms.len(), 2);
++        assert_eq!(rooms[0].address, "h:24873");
++        assert_eq!((rooms[0].players, rooms[0].most, rooms[0].game.as_str()), (1, 2, "DBZ"));
++        assert!(parse("hello", "h").is_err());
++    }
++}
+diff --git a/crates/zakuro/src/menus.rs b/crates/zakuro/src/menus.rs
+index 05df7a9..73ebd6b 100644
+--- a/crates/zakuro/src/menus.rs
++++ b/crates/zakuro/src/menus.rs
+@@ -39,6 +39,8 @@ pub enum Action {
+     /// open a room and join it, join another's, or leave the one joined.
+     HostRoom,
+     JoinRoom,
++    /// Extreme Fighters: join a public room at this address.
++    JoinRoomAt(String),
+     LeaveRoom,
+     /// take part in the Download Play offer at this place in the list, or
+     /// leave the one taken part in.
+@@ -87,6 +89,12 @@ pub struct Menus {
+     pub rebinding_touch: Option<usize>,
+     /// DBZ edition: whether each card's control is held now, to show it.
+     pub touch_held: [bool; 2],
++    /// Extreme Fighters: the public rooms of the room server, the list
++    /// being fetched, and why the last one failed.
++    lobby_rooms: Vec<crate::lobby::LobbyRoom>,
++    lobby_loading: Option<Receiver<Result<Vec<crate::lobby::LobbyRoom>, String>>>,
++    lobby_error: Option<String>,
++    lobby_asked: bool,
+     /// something to tell the user, until they close it.
+     pub message: Option<String>,
+     /// something to tell the user for a moment, over the game, and since
+@@ -111,6 +119,9 @@ pub struct Menus {
+     background: Background,
+ }
+ 
++/// Extreme Fighters: a softer orange for rooms with someone in them.
++const ORANGE_SOFT: Color32 = Color32::from_rgb(255, 190, 90);
++
+ /// the room the player is in, as the multiplayer window shows it.
+ pub struct RoomView {
+     pub name: String,
+@@ -649,6 +660,8 @@ impl Menus {
+                     }
+                 }
+                 None => {
++                    self.public_rooms(ui, settings, &mut actions);
++                    ui.separator();
+                     ui.label(RichText::new(t("Join a room")).strong());
+                     ui.horizontal(|ui| {
+                         ui.label(t("Address"));
+@@ -685,6 +698,68 @@ impl Menus {
+         actions
+     }
+ 
++    /// Extreme Fighters: the public rooms of a room server, to join with a
++    /// click, fetched away from the interface.
++    fn public_rooms(&mut self, ui: &mut egui::Ui, settings: &mut Settings, actions: &mut Vec<Action>) {
++        ui.label(RichText::new(t("Public rooms")).strong().color(crate::gui::ORANGE));
++        let mut refresh = false;
++        ui.horizontal(|ui| {
++            ui.label(t("Server"));
++            let field = ui.add(egui::TextEdit::singleline(&mut settings.lobby_address).hint_text("example.com").desired_width(180.0));
++            refresh |= field.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
++            refresh |= ui.add_enabled(self.lobby_loading.is_none(), egui::Button::new(t("Refresh"))).clicked();
++        });
++        // the list once when the window opens with a server to ask
++        if !self.lobby_asked && !settings.lobby_address.trim().is_empty() {
++            refresh = true;
++        }
++        if refresh && self.lobby_loading.is_none() && !settings.lobby_address.trim().is_empty() {
++            self.lobby_asked = true;
++            let (send, receive) = channel();
++            let server = settings.lobby_address.clone();
++            let _ = std::thread::Builder::new().name("lobby".into()).spawn(move || {
++                let _ = send.send(crate::lobby::fetch(&server));
++            });
++            self.lobby_loading = Some(receive);
++        }
++        if let Some(result) = self.lobby_loading.as_ref().and_then(|loading| loading.try_recv().ok()) {
++            self.lobby_loading = None;
++            match result {
++                Ok(rooms) => {
++                    self.lobby_rooms = rooms;
++                    self.lobby_error = None;
++                }
++                Err(error) => {
++                    self.lobby_rooms.clear();
++                    self.lobby_error = Some(error);
++                }
++            }
++        }
++        if self.lobby_loading.is_some() {
++            ui.label(RichText::new(t("Loading…")).weak());
++            ui.ctx().request_repaint();
++        } else if let Some(error) = &self.lobby_error {
++            ui.label(RichText::new(format!("{} ({error})", t("Could not reach the room server."))).color(Color32::from_rgb(255, 110, 100)));
++        } else if settings.lobby_address.trim().is_empty() {
++            ui.label(RichText::new(t("Write the address of an Extreme Fighters room server to see its rooms.")).weak());
++        } else if self.lobby_rooms.is_empty() {
++            ui.label(RichText::new(t("No rooms on this server.")).weak());
++        }
++        egui::Grid::new("public rooms").num_columns(4).spacing([12.0, 6.0]).show(ui, |ui| {
++            for room in &self.lobby_rooms {
++                ui.label(RichText::new(&room.name).strong());
++                let full = room.players >= room.most;
++                let color = if full { Color32::from_rgb(255, 110, 100) } else if room.players > 0 { ORANGE_SOFT } else { Color32::from_rgb(90, 220, 100) };
++                ui.label(RichText::new(format!("{}/{} {}", room.players, room.most, t("players"))).color(color));
++                ui.label(RichText::new(if room.game.is_empty() { t("waiting") } else { room.game.as_str() }).weak());
++                if ui.add_enabled(!full, egui::Button::new(t("Join"))).clicked() {
++                    actions.push(Action::JoinRoomAt(room.address.clone()));
++                }
++                ui.end_row();
++            }
++        });
++    }
++
+     /// the settings window, when open. own says the running game has
+     /// settings of its own, which go over these.
+     pub fn settings(&mut self, ctx: &egui::Context, settings: &mut Settings, own: bool) -> Vec<Action> {
+@@ -740,6 +815,14 @@ impl Menus {
+                 }
+ 
+                 section(ui, t("Graphics"));
++                // DBZ edition: the resolution as a few named steps
++                let presets = [(2, t("Performance (2x)")), (3, t("Balanced (3x)")), (4, t("High (4x)")), (6, t("Ultra (6x)"))];
++                let current = presets.iter().find(|(r, _)| *r == settings.resolution).map_or_else(|| format!("{}x", settings.resolution), |(_, name)| name.to_string());
++                egui::ComboBox::from_label(t("Graphics quality")).selected_text(current).show_ui(ui, |ui| {
++                    for (resolution, name) in presets {
++                        ui.selectable_value(&mut settings.resolution, resolution, name);
++                    }
++                });
+                 egui::ComboBox::from_label(t("Presented with"))
+                     .selected_text(match settings.renderer {
+                         Renderer::Vulkan => "Vulkan",
+@@ -758,6 +841,10 @@ impl Menus {
+                 ui.add_enabled_ui(interpolates, |ui| interpolation(ui, &mut settings.frame_interpolation));
+                 window_scale(ui, &mut settings.scale);
+                 screens(ui, &mut settings.layout);
++                // DBZ edition: the bottom screen over the full top one
++                ui.add(egui::Slider::new(&mut settings.overlay_size, 15..=45).text(t("Small bottom screen size")).suffix("%"));
++                ui.checkbox(&mut settings.overlay_left, t("Small bottom screen on the left"));
++                ui.label(RichText::new(t("With the full top screen, F10 shows or hides the small bottom one.")).weak());
+                 rotation(ui, &mut settings.orientation);
+                 filter(ui, &mut settings.filter);
+                 integer_scale(ui, &mut settings.integer_scale);
+diff --git a/crates/zakuro/src/settings.rs b/crates/zakuro/src/settings.rs
+index 31a6dd1..18e2a7b 100644
+--- a/crates/zakuro/src/settings.rs
++++ b/crates/zakuro/src/settings.rs
+@@ -27,10 +27,13 @@ pub enum Screens {
+     TopOnly,
+     BottomOnly,
+     LargeTop,
++    /// DBZ edition: the top screen filling the window, the bottom one small
++    /// over a lower corner of it.
++    TopOverlay,
+ }
+ 
+ impl Screens {
+-    pub const ALL: [Screens; 5] = [Screens::Stacked, Screens::SideBySide, Screens::LargeTop, Screens::TopOnly, Screens::BottomOnly];
++    pub const ALL: [Screens; 6] = [Screens::TopOverlay, Screens::LargeTop, Screens::Stacked, Screens::SideBySide, Screens::TopOnly, Screens::BottomOnly];
+ 
+     pub fn name(self) -> &'static str {
+         match self {
+@@ -39,11 +42,15 @@ impl Screens {
+             Screens::TopOnly => "Top screen only",
+             Screens::BottomOnly => "Bottom screen only",
+             Screens::LargeTop => "Big top screen, small bottom one",
++            Screens::TopOverlay => "Full top screen, small bottom one over it",
+         }
+     }
+ 
+-    pub fn screens(self) -> ScreenLayout {
++    /// how the screens go, the bottom one over the top one percent of its
++    /// height tall, on the left when left says so, where it goes over it.
++    pub fn screens(self, percent: u32, left: bool) -> ScreenLayout {
+         match self {
++            Screens::TopOverlay => ScreenLayout::Overlay { percent: percent.clamp(10, 60) as u8, left },
+             Screens::Stacked => ScreenLayout::Stacked,
+             Screens::SideBySide => ScreenLayout::SideBySide,
+             Screens::TopOnly => ScreenLayout::TopOnly,
+@@ -526,6 +533,10 @@ pub struct Settings {
+     pub scale: u32,
+     #[serde(deserialize_with = "or_default")]
+     pub layout: Screens,
++    /// DBZ edition: how tall the bottom screen is over the top one, percent
++    /// of its height, and whether it goes on the left.
++    pub overlay_size: u32,
++    pub overlay_left: bool,
+     #[serde(deserialize_with = "or_default")]
+     pub orientation: Orientation,
+     /// how the screens' pixels look scaled up.
+@@ -572,6 +583,8 @@ pub struct Settings {
+     pub room_port: u16,
+     /// DBZ edition: the language of the menus, as the installer names it.
+     pub ui_language: String,
++    /// Extreme Fighters: the room server whose public rooms Online lists.
++    pub lobby_address: String,
+     /// DBZ edition: controller buttons that touch the character cards.
+     pub touch: TouchButtons,
+ }
+@@ -639,6 +652,8 @@ impl Default for Settings {
+             recompiled: true,
+             scale: 2,
+             layout: Screens::Stacked,
++            overlay_size: 28,
++            overlay_left: false,
+             orientation: Orientation::North,
+             filter: Filter::Smooth,
+             integer_scale: false,
+@@ -663,6 +678,7 @@ impl Default for Settings {
+             room_name: String::new(),
+             room_port: zakuro_core::room::DEFAULT_PORT,
+             ui_language: "en".to_owned(),
++            lobby_address: String::new(),
+             touch: TouchButtons::default(),
+         }
+     }
+diff --git a/crates/zakuro/src/tr.rs b/crates/zakuro/src/tr.rs
+index 213e63b..608897e 100644
+--- a/crates/zakuro/src/tr.rs
++++ b/crates/zakuro/src/tr.rs
+@@ -109,6 +109,15 @@ const TABLE: &[(&str, [&str; 6])] = &[
+     ("This game's own, rather than the general setting.", ["Propio de este juego, en lugar del general.", "Propre à ce jeu, au lieu du général.", "Eigen für dieses Spiel statt allgemein.", "Proprio di questo gioco invece che generale.", "共通設定ではなくこのゲーム専用。", "仅本游戏使用，而非通用设置。"]),
+     // online
+     ("Online play with others goes through a room, which one of you opens and the others join over the internet. It uses the game's own local wireless battle.", ["El juego online funciona con salas: uno abre una sala y los demás se unen por internet. Usa el modo de combate inalámbrico local del propio juego.", "Le jeu en ligne passe par un salon : l'un l'ouvre, les autres le rejoignent par internet. Il utilise le combat sans fil local du jeu.", "Online-Spiel läuft über einen Raum: einer öffnet ihn, die anderen treten über das Internet bei. Es nutzt den lokalen Drahtlos-Kampf des Spiels.", "Il gioco online passa per una stanza: uno la apre e gli altri si uniscono via internet. Usa la battaglia wireless locale del gioco.", "オンラインはルームを使います。1人がルームを開き、他の人がインターネット経由で参加します。ゲーム本来のローカル通信対戦を使用します。", "在线游戏通过房间进行：一人创建房间，其他人通过互联网加入。使用游戏自带的本地无线对战。"]),
++    ("Public rooms", ["Salas públicas", "Salons publics", "Öffentliche Räume", "Stanze pubbliche", "公開ルーム", "公开房间"]),
++    ("Server", ["Servidor", "Serveur", "Server", "Server", "サーバー", "服务器"]),
++    ("Refresh", ["Actualizar", "Actualiser", "Aktualisieren", "Aggiorna", "更新", "刷新"]),
++    ("Loading…", ["Cargando…", "Chargement…", "Wird geladen…", "Caricamento…", "読み込み中…", "加载中…"]),
++    ("Could not reach the room server.", ["No se pudo conectar con el servidor de salas.", "Impossible de joindre le serveur de salons.", "Der Raumserver ist nicht erreichbar.", "Impossibile raggiungere il server delle stanze.", "ルームサーバーに接続できませんでした。", "无法连接到房间服务器。"]),
++    ("Write the address of an Extreme Fighters room server to see its rooms.", ["Escribe la dirección de un servidor de salas de Extreme Fighters para ver sus salas.", "Saisissez l'adresse d'un serveur de salons Extreme Fighters pour voir ses salons.", "Gib die Adresse eines Extreme-Fighters-Raumservers ein, um seine Räume zu sehen.", "Scrivi l'indirizzo di un server di stanze di Extreme Fighters per vederne le stanze.", "Extreme Fighters のルームサーバーのアドレスを入力すると、ルーム一覧が表示されます。", "输入 Extreme Fighters 房间服务器地址以查看房间。"]),
++    ("No rooms on this server.", ["Este servidor no tiene salas.", "Aucun salon sur ce serveur.", "Keine Räume auf diesem Server.", "Nessuna stanza su questo server.", "このサーバーにはルームがありません。", "该服务器没有房间。"]),
++    ("players", ["jugadores", "joueurs", "Spieler", "giocatori", "人", "名玩家"]),
++    ("waiting", ["esperando", "en attente", "wartet", "in attesa", "待機中", "等待中"]),
+     ("Nickname", ["Apodo", "Pseudo", "Spitzname", "Soprannome", "ニックネーム", "昵称"]),
+     ("In the room", ["En la sala", "Dans le salon", "Im Raum", "Nella stanza", "ルーム:", "所在房间"]),
+     ("playing", ["jugando a", "joue à", "spielt", "gioca a", "プレイ中:", "正在玩"]),
+@@ -140,6 +149,15 @@ const TABLE: &[(&str, [&str; 6])] = &[
+     ("fast forward", ["avance rápido", "avance rapide", "Schnellvorlauf", "avanti veloce", "早送り", "快进"]),
+     ("fps", ["FPS", "IPS", "FPS", "FPS", "FPS", "FPS"]),
+     // names of choices
++    ("Full top screen, small bottom one over it", ["Superior completa, inferior pequeña encima", "Écran du haut complet, petit écran du bas par-dessus", "Oberer Bildschirm voll, kleiner unterer darüber", "Superiore intero, inferiore piccolo sopra", "上画面を全体に、下画面を小さく重ねる", "上屏全屏，下屏小窗叠加"]),
++    ("Graphics quality", ["Calidad gráfica", "Qualité graphique", "Grafikqualität", "Qualità grafica", "画質", "画质"]),
++    ("Performance (2x)", ["Rendimiento (2x)", "Performances (2x)", "Leistung (2x)", "Prestazioni (2x)", "パフォーマンス (2x)", "性能 (2x)"]),
++    ("Balanced (3x)", ["Equilibrada (3x)", "Équilibrée (3x)", "Ausgewogen (3x)", "Bilanciata (3x)", "バランス (3x)", "均衡 (3x)"]),
++    ("High (4x)", ["Alta (4x)", "Élevée (4x)", "Hoch (4x)", "Alta (4x)", "高 (4x)", "高 (4x)"]),
++    ("Ultra (6x)", ["Ultra (6x)", "Ultra (6x)", "Ultra (6x)", "Ultra (6x)", "ウルトラ (6x)", "极高 (6x)"]),
++    ("Small bottom screen size", ["Tamaño de la pantalla inferior pequeña", "Taille du petit écran du bas", "Größe des kleinen unteren Bildschirms", "Dimensione dello schermo inferiore piccolo", "小さい下画面のサイズ", "下屏小窗大小"]),
++    ("Small bottom screen on the left", ["Pantalla inferior pequeña a la izquierda", "Petit écran du bas à gauche", "Kleiner unterer Bildschirm links", "Schermo inferiore piccolo a sinistra", "小さい下画面を左側に", "下屏小窗放在左侧"]),
++    ("With the full top screen, F10 shows or hides the small bottom one.", ["Con la superior completa, F10 muestra u oculta la inferior pequeña.", "Avec l'écran du haut complet, F10 affiche ou masque le petit écran du bas.", "Mit vollem oberen Bildschirm blendet F10 den kleinen unteren ein oder aus.", "Con lo schermo superiore intero, F10 mostra o nasconde quello inferiore piccolo.", "上画面全体表示中は、F10 で小さい下画面の表示／非表示を切り替え。", "上屏全屏时，按 F10 显示或隐藏下屏小窗。"]),
+     ("Top over bottom", ["Superior sobre inferior", "Haut au-dessus du bas", "Oben über unten", "Superiore sopra inferiore", "上下に並べる", "上下排列"]),
+     ("Screens side by side", ["Pantallas lado a lado", "Écrans côte à côte", "Nebeneinander", "Schermi affiancati", "左右に並べる", "左右排列"]),
+     ("Top screen only", ["Solo pantalla superior", "Écran du haut seul", "Nur oberer Bildschirm", "Solo schermo superiore", "上画面のみ", "仅上屏"]),
+-- 
+2.43.0
+

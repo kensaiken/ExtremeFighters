@@ -1,0 +1,60 @@
+EXTREME FIGHTERS - SERVIDOR DE SALAS ONLINE (v0.3.0)
+====================================================
+
+Que es
+  Un programa pequeno que mantiene abiertas varias salas online y publica su
+  lista. En el juego, en Online > Salas publicas, se escribe la direccion de
+  este servidor y aparecen las salas para unirse con un clic.
+  Todos se conectan a este servidor: los jugadores NO tienen que abrir
+  puertos en su router. Solo el equipo donde corre el servidor.
+
+Donde ponerlo
+  - Un PC de casa que este encendido mientras jugais, o
+  - Un servidor en internet (VPS). Los hay gratuitos (por ejemplo Oracle
+    Cloud "Always Free") o muy baratos. Usa ef-servidor-linux en Linux.
+
+Como arrancarlo
+  Windows: doble clic en Iniciar_servidor.bat
+  Linux:   chmod +x ef-servidor-linux && ./ef-servidor-linux
+
+  Opciones (todas opcionales):
+    --salas 6            cuantas salas abrir
+    --jugadores 2        jugadores por sala
+    --puerto 24873       puerto de la primera sala (las demas van seguidas)
+    --puerto-lista 24872 puerto de la lista de salas
+    --nombre Sala        nombre de las salas (Sala 1, Sala 2, ...)
+    --contrasena X       contrasena para todas las salas (opcional)
+
+Puertos que hay que abrir (TCP)
+  Con las opciones de serie: 24872 a 24878 (la lista + 6 salas).
+  - PC de casa: en el router, "reenvio de puertos" de 24872-24878 TCP a la IP
+    de ese PC, y permitir ef-servidor en el Firewall de Windows (lo pregunta
+    la primera vez).
+  - VPS: abre esos puertos en el cortafuegos del proveedor.
+
+Comprobar que funciona
+  Abre en el navegador http://TU-IP:24872/  -> debe salir la lista de salas.
+  Tu IP publica: busca "cual es mi ip" en internet.
+
+En el juego
+  Esc > Online > Salas publicas > Servidor: escribe tu IP o dominio
+  (por ejemplo 85.10.20.30 o misalas.duckdns.org) > Actualizar > Unirse.
+  Consejo: con un dominio gratuito (DuckDNS, No-IP) no hace falta cambiar la
+  direccion si tu IP de casa cambia.
+
+Notas
+  - El online usa el combate inalambrico local del propio juego, sin
+    rollback: con mucha latencia se nota el retraso. Mejor servidores
+    cercanos a los jugadores.
+  - El servidor no guarda nada ni ve el contenido de las partidas: solo
+    reenvia los datos entre los jugadores de cada sala.
+
+Licencia: MIT. Basado en el sistema de salas de Zakuro (fearkov), MIT.
+
+---------------------------------------------------------------------------
+ENGLISH (short)
+  Keeps several online rooms open and publishes their list. In the game:
+  Online > Public rooms > Server: your IP or domain > Refresh > Join.
+  Only the server needs open ports: TCP 24872-24878 by default.
+  Windows: run Iniciar_servidor.bat. Linux: ./ef-servidor-linux
+  Check it in a browser: http://YOUR-IP:24872/
