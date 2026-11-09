@@ -9,7 +9,7 @@
 param([switch]$AutoUpdate, [string]$Destino = '', [switch]$Jugar)
 
 $ErrorActionPreference = 'Stop'
-$AppVersion = '0.5.0'   # version de Extreme Fighters
+$AppVersion = '0.5.1'   # version de Extreme Fighters
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type -Namespace Native -Name Dpi -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetProcessDPIAware();'
@@ -20,7 +20,7 @@ Add-Type -Namespace Native -Name Dpi -MemberDefinition '[DllImport("user32.dll")
 # Zakuro edicion DBZ (v0.2.32 modificado: menu traducido y con estilo propio,
 # gatillos para las cartas de personaje, Online). Va en bin\zakuro.exe y usa
 # exactamente el 3dsrecomp df82e6e3 que va en bin\
-$ZakuroVersion = 'v0.2.32-dbz5'
+$ZakuroVersion = 'v0.2.32-dbz6'
 $ZigVersion    = '0.17.0'
 $ZigFile       = "zig-x86_64-windows-$ZigVersion.zip"
 $ZigSize       = 100268137
@@ -880,6 +880,10 @@ $Steps = @(
         Copy-Item $PlaySrc $PlayExe -Force
         # actualizador del juego (Esc > Actualizar) y lo que necesita saber
         Copy-Item (Join-Path $Here 'bin\actualizar.ps1') (Join-Path $InstDir 'actualizar.ps1') -Force
+        # servidor de salas (Online > Abrir servidor publico, o Iniciar_servidor.bat)
+        $srvDir = Join-Path $InstDir 'servidor'
+        New-Item -ItemType Directory -Force -Path $srvDir | Out-Null
+        Copy-Item (Join-Path $Here 'bin\servidor\*') $srvDir -Force
         [IO.File]::WriteAllText((Join-Path $InstDir 'ef_version.txt'), $AppVersion, (New-Object System.Text.UTF8Encoding($false)))
         [IO.File]::WriteAllText((Join-Path $InstDir 'idioma.txt'), $script:Lang, (New-Object System.Text.UTF8Encoding($false)))
         # de serie: pantalla superior grande y la inferior pequena (layout large_top

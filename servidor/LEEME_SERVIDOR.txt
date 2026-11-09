@@ -1,5 +1,11 @@
-EXTREME FIGHTERS - SERVIDOR DE SALAS ONLINE (v0.4.0, opcional)
+EXTREME FIGHTERS - SERVIDOR DE SALAS ONLINE (v0.5.1, opcional)
 ====================================================
+
+LO MAS FACIL: desde el juego
+  Esc > Online > "Abrir servidor publico en este PC". Arranca este mismo
+  servidor mientras el juego esta abierto, abre el router solo (UPnP) y te
+  muestra la direccion para compartir. No hace falta este archivo.
+  Este programa suelto es para tener salas abiertas 24/7 sin el juego.
 
 Que es
   Un programa pequeno que mantiene abiertas varias salas online y publica su

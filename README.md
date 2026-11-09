@@ -6,7 +6,7 @@
 
 <p align="center">🇪🇸 <a href="README.es.md">Leer en español</a></p>
 
-<p align="center"><b>Version 0.5.0</b> · in development · <a href="CHANGELOG.md">changelog</a></p>
+<p align="center"><b>Version 0.5.1</b> · in development · <a href="CHANGELOG.md">changelog</a></p>
 
 <p align="center">
   <b>Native PC (Windows x64) port of <i>Dragon Ball Z: Extreme Butoden</i> (Nintendo 3DS)</b><br>
@@ -113,8 +113,10 @@ Jugar.exe    starts the game
 ## 🌐 Playing online
 **With friends (recommended):** *Esc → Online → Create online room* and share the **room code**. Your friends go to *Online → Room code or address*, type it and **Join**. Nothing else to download.
 
-**Online room server (optional):** for communities that want rooms open 24/7, the release also includes **`ExtremeFighters_Servidor.zip`**: a small program (Windows and Linux) that keeps several online rooms open and publishes their list.
-1. Run it on a PC that stays on or on a server (VPS): `Iniciar_servidor.bat` on Windows, `./ef-servidor-linux` on Linux.
+**Public server on your PC (optional):** *Online → Open public server on this PC* opens 6 public rooms while the game is open, opens the router by itself (UPnP) and shows the address to share. Others type it in *Public rooms → Server*.
+
+**24/7 room server (optional):** the same server is installed in the `servidor` folder of your install, to keep rooms open without the game:
+1. Run it on a PC that stays on or on a server (VPS): `Iniciar_servidor.bat` on Windows, `./ef-servidor-linux` on Linux (built with `herramientas/compilar.sh`).
 2. Open TCP ports **24872-24878** on that machine's router or firewall.
 3. Check it in a browser: `http://YOUR-IP:24872/`.
 4. In the game: *Online → Public rooms → Server*: type the IP or domain → **Refresh** → **Join**.

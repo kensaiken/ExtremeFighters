@@ -3,6 +3,12 @@
 Cada versión con sus novedades (✨), cambios (🔧) y correcciones (🐛).
 Numeración `0.X.Y` mientras esté en desarrollo: sube **Y** para correcciones y **X** para novedades.
 
+## [0.5.1] - 2026-11-10
+
+### ✨ Novedades
+- **Un solo archivo para descargar**: el servidor de salas va dentro del instalador (carpeta `servidor` de la instalación). Ya no hay `ExtremeFighters_Servidor.zip` aparte.
+- **Online → Abrir servidor público en este PC**: abre 6 salas públicas mientras el juego está abierto, abre el router solo (UPnP) y muestra la dirección para compartir. Usa los puertos 24880-24886 para no chocar con la sala propia.
+
 ## [0.5.0] - 2026-11-10
 
 ### 🐛 Correcciones

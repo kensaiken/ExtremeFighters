@@ -25,13 +25,14 @@ x86_64-w64-mingw32-strip -o "$OUT/bin/zakuro.exe" "$WORK/zakuro/target/x86_64-pc
 cp "$REPO/zakuro-dbz/LICENSE-zakuro.txt" "$OUT/bin/"
 
 # 2b) Servidor de salas online (Windows y Linux)
-SRV="$REPO/ExtremeFighters_Servidor"
+# el servidor va dentro del instalador (bin/servidor); la version de Linux
+# queda aparte por si alguien lo quiere en un VPS
+SRV="$OUT/bin/servidor"
 mkdir -p "$SRV"
 (cd "$WORK/zakuro" && cargo build --release -p ef-servidor --target x86_64-pc-windows-gnu && cargo build --release -p ef-servidor)
 x86_64-w64-mingw32-strip -o "$SRV/ef-servidor.exe" "$WORK/zakuro/target/x86_64-pc-windows-gnu/release/ef-servidor.exe"
-strip -o "$SRV/ef-servidor-linux" "$WORK/zakuro/target/release/ef-servidor"
-cp "$REPO/servidor/"* "$SRV/" && cp "$REPO/zakuro-dbz/LICENSE-zakuro.txt" "$SRV/"
-(cd "$REPO" && rm -f ExtremeFighters_Servidor.zip && zip -qr9 ExtremeFighters_Servidor.zip ExtremeFighters_Servidor)
+strip -o "$REPO/ef-servidor-linux" "$WORK/zakuro/target/release/ef-servidor"
+cp "$REPO/servidor/"* "$SRV/"
 
 # 3) Lanzadores con icono (Instalar.exe y Jugar.exe)
 L="$REPO/instalador/lanzadores"

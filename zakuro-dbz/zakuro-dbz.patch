@@ -1,7 +1,7 @@
 From 2f6af48ecccb5f48d41acb574d61e9f92c021817 Mon Sep 17 00:00:00 2001
 From: Extreme Fighters <noreply@example.com>
 Date: Mon, 9 Nov 2026 11:26:08 +0000
-Subject: [PATCH 1/5] Extreme Fighters: Zakuro DBZ edition (translated themed
+Subject: [PATCH 1/6] Extreme Fighters: Zakuro DBZ edition (translated themed
  menus, touch buttons for character cards, Online)
 
 ---
@@ -1201,7 +1201,7 @@ index 0000000..940dbe2
 From 8e3ae3142a51d7de2971d1a5119a568daa383d10 Mon Sep 17 00:00:00 2001
 From: Extreme Fighters <noreply@example.com>
 Date: Mon, 9 Nov 2026 14:18:08 +0000
-Subject: [PATCH 2/5] Extreme Fighters 0.2.1: learn the card controls from the
+Subject: [PATCH 2/6] Extreme Fighters 0.2.1: learn the card controls from the
  controller itself, live indicator
 
 ---
@@ -1541,7 +1541,7 @@ index 940dbe2..213e63b 100644
 From e904c3e353303439aca7b9bb7fdd4423b4c69cdc Mon Sep 17 00:00:00 2001
 From: Extreme Fighters <noreply@example.com>
 Date: Mon, 9 Nov 2026 14:31:00 +0000
-Subject: [PATCH 3/5] Extreme Fighters 0.3.0: full top screen with small bottom
+Subject: [PATCH 3/6] Extreme Fighters 0.3.0: full top screen with small bottom
  overlay, graphics quality presets, public room list and room server
 
 ---
@@ -2248,7 +2248,7 @@ index 213e63b..608897e 100644
 From 10f0dd1cb95b0d88009a807b19c9d10005ab3f57 Mon Sep 17 00:00:00 2001
 From: Extreme Fighters <noreply@example.com>
 Date: Mon, 9 Nov 2026 18:59:17 +0000
-Subject: [PATCH 4/5] Extreme Fighters 0.4.0: online rooms that open the router
+Subject: [PATCH 4/6] Extreme Fighters 0.4.0: online rooms that open the router
  (UPnP), room codes, CG-NAT warning, ping, update checker
 
 ---
@@ -3384,7 +3384,7 @@ index 608897e..1aac6ec 100644
 From 463520df609b6ac1d4dd3a52df79346c4e0a758d Mon Sep 17 00:00:00 2001
 From: Extreme Fighters <noreply@example.com>
 Date: Mon, 9 Nov 2026 22:41:12 +0000
-Subject: [PATCH 5/5] Extreme Fighters 0.5.0: tap-based card controls with two
+Subject: [PATCH 5/6] Extreme Fighters 0.5.0: tap-based card controls with two
  schemes, clickable card positions, save import
 
 ---
@@ -3824,6 +3824,286 @@ index 1aac6ec..df53ad4 100644
 +    ("Save imported. Your previous save was copied to:", ["Partida importada. Tu partida anterior se ha copiado en:", "Sauvegarde importée. L'ancienne a été copiée dans :", "Spielstand importiert. Der vorherige wurde kopiert nach:", "Salvataggio importato. Quello precedente è stato copiato in:", "インポートしました。以前のセーブのコピー先:", "存档已导入。之前的存档已复制到："]),
 +    ("Save imported.", ["Partida importada.", "Sauvegarde importée.", "Spielstand importiert.", "Salvataggio importato.", "インポートしました。", "存档已导入。"]),
 +    ("The save could not be imported:", ["No se pudo importar la partida:", "Impossible d'importer la sauvegarde :", "Der Spielstand konnte nicht importiert werden:", "Impossibile importare il salvataggio:", "セーブをインポートできませんでした:", "无法导入存档："]),
+     ("Nickname", ["Apodo", "Pseudo", "Spitzname", "Soprannome", "ニックネーム", "昵称"]),
+     ("In the room", ["En la sala", "Dans le salon", "Im Raum", "Nella stanza", "ルーム:", "所在房间"]),
+     ("playing", ["jugando a", "joue à", "spielt", "gioca a", "プレイ中:", "正在玩"]),
+-- 
+2.43.0
+
+
+From af5b704d23bb55eb28cf2a734179d33dd2dc661f Mon Sep 17 00:00:00 2001
+From: Extreme Fighters <noreply@example.com>
+Date: Mon, 9 Nov 2026 23:17:46 +0000
+Subject: [PATCH 6/6] Extreme Fighters 0.5.1: public room server from the game,
+ with UPnP
+
+---
+ crates/zakuro/src/lib.rs    | 29 +++++++++++++
+ crates/zakuro/src/menus.rs  | 56 +++++++++++++++++++++++++
+ crates/zakuro/src/online.rs | 84 +++++++++++++++++++++++++++++++++++++
+ crates/zakuro/src/tr.rs     |  8 ++++
+ 4 files changed, 177 insertions(+)
+
+diff --git a/crates/zakuro/src/lib.rs b/crates/zakuro/src/lib.rs
+index 08ab646..2ba6bc4 100644
+--- a/crates/zakuro/src/lib.rs
++++ b/crates/zakuro/src/lib.rs
+@@ -150,6 +150,8 @@ pub fn run_with(linked: Option<Linked>, overlay: Option<Box<dyn GameOverlay>>) {
+         reach_check: None,
+         update_check: None,
+         update_started: false,
++        local_server: None,
++        server_check: None,
+         room: None,
+         dlp_guest: None,
+         dlp_own: None,
+@@ -469,6 +471,10 @@ struct App {
+     reach_check: Option<std::sync::mpsc::Receiver<online::Reach>>,
+     update_check: Option<std::sync::mpsc::Receiver<online::Update>>,
+     update_started: bool,
++    /// Extreme Fighters: the public room server started from the game, and
++    /// whether its ports could be opened.
++    local_server: Option<online::LocalServer>,
++    server_check: Option<std::sync::mpsc::Receiver<online::ServerReach>>,
+     room: Option<zakuro_core::room::Connection>,
+     /// Download Play as a guest, while in a room with no game running.
+     dlp_guest: Option<zakuro_core::download_play::Guest>,
+@@ -1362,6 +1368,23 @@ impl App {
+             Action::Quit => event_loop.exit(),
+             Action::CheckUpdates => self.check_updates(),
+             Action::ImportSave => self.import_save(),
++            Action::StartServer => match online::start_server() {
++                Ok((server, ports)) => {
++                    self.local_server = Some(server);
++                    let (send, receive) = std::sync::mpsc::channel();
++                    let _ = std::thread::Builder::new().name("router".into()).spawn(move || {
++                        let _ = send.send(online::open_server(&ports));
++                    });
++                    self.server_check = Some(receive);
++                    self.menus.server_reach = None;
++                }
++                Err(error) => self.menus.message = Some(format!("{} {error}", tr::t("The server could not be started:"))),
++            },
++            Action::StopServer => {
++                self.local_server = None;
++                self.server_check = None;
++                self.menus.server_reach = None;
++            }
+             Action::SavesFolder => {
+                 if let Some(dir) = self.data_dir.clone() {
+                     let folder = match self.program_id() {
+@@ -1672,6 +1695,12 @@ impl App {
+                 self.menus.update_quiet = true;
+             }
+         }
++        self.menus.server_available = online::server_exe().is_some();
++        self.menus.server_running = self.local_server.is_some();
++        if let Some(reach) = self.server_check.as_ref().and_then(|check| check.try_recv().ok()) {
++            self.server_check = None;
++            self.menus.server_reach = Some(reach);
++        }
+         if let Some(reach) = self.reach_check.as_ref().and_then(|check| check.try_recv().ok()) {
+             self.reach_check = None;
+             self.menus.reach = Some(reach);
+diff --git a/crates/zakuro/src/menus.rs b/crates/zakuro/src/menus.rs
+index 4588630..0da6010 100644
+--- a/crates/zakuro/src/menus.rs
++++ b/crates/zakuro/src/menus.rs
+@@ -48,6 +48,9 @@ pub enum Action {
+     /// where the saves are.
+     ImportSave,
+     SavesFolder,
++    /// Extreme Fighters: the public room server on this computer.
++    StartServer,
++    StopServer,
+     LeaveRoom,
+     /// take part in the Download Play offer at this place in the list, or
+     /// leave the one taken part in.
+@@ -113,6 +116,11 @@ pub struct Menus {
+     pub update: Option<crate::online::Update>,
+     pub update_busy: bool,
+     pub update_quiet: bool,
++    /// Extreme Fighters: whether the room server is installed, running, and
++    /// how others reach it.
++    pub server_available: bool,
++    pub server_running: bool,
++    pub server_reach: Option<crate::online::ServerReach>,
+     /// something to tell the user, until they close it.
+     pub message: Option<String>,
+     /// something to tell the user for a moment, over the game, and since
+@@ -700,6 +708,10 @@ impl Menus {
+                 }
+                 None => {
+                     self.public_rooms(ui, settings, &mut actions);
++                    if self.server_available {
++                        ui.separator();
++                        self.local_server(ui, &mut actions);
++                    }
+                     ui.separator();
+                     ui.label(RichText::new(t("Join a room")).strong());
+                     ui.horizontal(|ui| {
+@@ -738,6 +750,50 @@ impl Menus {
+         actions
+     }
+ 
++    /// Extreme Fighters: a public room server on this computer, for others
++    /// to find rooms on without codes.
++    fn local_server(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
++        use crate::online::ServerReach;
++        ui.label(RichText::new(t("Public server on this PC")).strong().color(crate::gui::ORANGE));
++        if !self.server_running {
++            ui.label(RichText::new(t("Opens 6 public rooms that anyone can see and join from Public rooms, while the game is open. Only needed for communities: to play with friends, Create online room is enough.")).weak());
++            if ui.button(t("Open public server on this PC")).clicked() {
++                actions.push(Action::StartServer);
++            }
++            return;
++        }
++        match &self.server_reach {
++            None => {
++                ui.label(RichText::new(t("Opening the router…")).weak());
++                ui.ctx().request_repaint();
++            }
++            Some(ServerReach::Open { address }) | Some(ServerReach::Manual { address, .. }) => {
++                ui.label(t("Server address"));
++                ui.horizontal(|ui| {
++                    ui.label(RichText::new(address).size(20.0).strong().monospace().color(crate::gui::ORANGE));
++                    if ui.button(t("Copy")).clicked() {
++                        ui.ctx().copy_text(address.clone());
++                    }
++                });
++                ui.label(RichText::new(t("Others write it in Public rooms, Server, and see your rooms.")).weak());
++                match &self.server_reach {
++                    Some(ServerReach::Open { .. }) => drop(ui.label(RichText::new(t("✔ Router opened by itself (UPnP).")).color(Color32::from_rgb(90, 220, 100)))),
++                    Some(ServerReach::Manual { first, last, .. }) => drop(ui.label(
++                        RichText::new(format!("{} {first}-{last} (TCP).", t("The router could not be opened by itself. Others can only come in if you open these ports to this PC:"))).color(ORANGE_SOFT),
++                    )),
++                    _ => {}
++                }
++            }
++            Some(ServerReach::Unreachable) => drop(ui.label(
++                RichText::new(t("Your internet connection can't receive players (your provider uses CG-NAT). Join someone else's room, or use a public room server.")).color(Color32::from_rgb(255, 110, 100)),
++            )),
++            Some(ServerReach::Offline) => drop(ui.label(RichText::new(t("No internet connection could be found.")).color(Color32::from_rgb(255, 110, 100)))),
++        }
++        if ui.button(t("Close the server")).clicked() {
++            actions.push(Action::StopServer);
++        }
++    }
++
+     /// Extreme Fighters: the code of this program's room and whether others
+     /// can reach it.
+     fn room_reach(&mut self, ui: &mut egui::Ui) {
+diff --git a/crates/zakuro/src/online.rs b/crates/zakuro/src/online.rs
+index 2e8b812..ea3e166 100644
+--- a/crates/zakuro/src/online.rs
++++ b/crates/zakuro/src/online.rs
+@@ -164,6 +164,90 @@ fn curl(url: &str, seconds: u32) -> Option<String> {
+     String::from_utf8(output.stdout).ok()
+ }
+ 
++/// the ports the public room server started from the game uses: its list
++/// first, then its rooms, out of the way of the game's own room.
++pub const SERVER_LIST_PORT: u16 = 24880;
++pub const SERVER_ROOMS: u16 = 6;
++
++/// the room server that comes with Extreme Fighters, when it is installed.
++pub fn server_exe() -> Option<std::path::PathBuf> {
++    Some(install_dir()?.join("servidor").join("ef-servidor.exe")).filter(|path| path.is_file())
++}
++
++/// a public room server running on this computer, stopped and its ports
++/// given back to the router when dropped.
++pub struct LocalServer {
++    child: std::process::Child,
++    ports: Vec<u16>,
++}
++
++impl Drop for LocalServer {
++    fn drop(&mut self) {
++        let _ = self.child.kill();
++        let ports = std::mem::take(&mut self.ports);
++        let _ = std::thread::Builder::new().name("router".into()).spawn(move || {
++            for port in ports {
++                close(port);
++            }
++        });
++    }
++}
++
++/// starts the room server with its rooms, the ports it takes.
++pub fn start_server() -> Result<(LocalServer, Vec<u16>), String> {
++    let exe = server_exe().ok_or("ef-servidor.exe is missing, run the installer again")?;
++    let mut command = Command::new(&exe);
++    command
++        .args(["--salas", &SERVER_ROOMS.to_string(), "--jugadores", "2", "--puerto-lista", &SERVER_LIST_PORT.to_string(), "--puerto", &(SERVER_LIST_PORT + 1).to_string()])
++        .stdin(Stdio::null())
++        .stdout(Stdio::null())
++        .stderr(Stdio::null());
++    #[cfg(windows)]
++    {
++        use std::os::windows::process::CommandExt;
++        command.creation_flags(0x0800_0000);
++    }
++    let child = command.spawn().map_err(|error| error.to_string())?;
++    let ports: Vec<u16> = (SERVER_LIST_PORT..=SERVER_LIST_PORT + SERVER_ROOMS).collect();
++    Ok((LocalServer { child, ports: ports.clone() }, ports))
++}
++
++/// whether the server's ports could be opened, and the address others
++/// write in Public rooms to see its rooms.
++#[derive(Debug, Clone, PartialEq)]
++pub enum ServerReach {
++    Open { address: String },
++    Manual { address: String, first: u16, last: u16 },
++    Unreachable,
++    Offline,
++}
++
++/// asks the router to let the server's ports through.
++pub fn open_server(ports: &[u16]) -> ServerReach {
++    let mut mapped = None;
++    let mut failed = false;
++    for &port in ports {
++        match map_port(port) {
++            Ok(external) => mapped = Some(external),
++            Err(error) => {
++                log::info!("port {port} could not be opened, {error}");
++                failed = true;
++            }
++        }
++    }
++    let public = public_ip();
++    let (first, last) = (ports.first().copied().unwrap_or(SERVER_LIST_PORT), ports.last().copied().unwrap_or(SERVER_LIST_PORT));
++    let address = |ip: Ipv4Addr| format!("{ip}:{first}");
++    match (mapped, public) {
++        (Some(external), Some(_)) if is_private(external) => ServerReach::Unreachable,
++        (Some(external), Some(public)) if external == public && !failed => ServerReach::Open { address: address(public) },
++        (_, Some(public)) => ServerReach::Manual { address: address(public), first, last },
++        (Some(external), None) if !is_private(external) && !failed => ServerReach::Open { address: address(external) },
++        (Some(_), None) => ServerReach::Unreachable,
++        (None, None) => ServerReach::Offline,
++    }
++}
++
+ /// the folder Extreme Fighters is installed in, the one above Zakuro's.
+ pub fn install_dir() -> Option<std::path::PathBuf> {
+     let exe = std::env::current_exe().ok()?;
+diff --git a/crates/zakuro/src/tr.rs b/crates/zakuro/src/tr.rs
+index df53ad4..1160fbc 100644
+--- a/crates/zakuro/src/tr.rs
++++ b/crates/zakuro/src/tr.rs
+@@ -159,6 +159,14 @@ const TABLE: &[(&str, [&str; 6])] = &[
+     ("Save imported. Your previous save was copied to:", ["Partida importada. Tu partida anterior se ha copiado en:", "Sauvegarde importée. L'ancienne a été copiée dans :", "Spielstand importiert. Der vorherige wurde kopiert nach:", "Salvataggio importato. Quello precedente è stato copiato in:", "インポートしました。以前のセーブのコピー先:", "存档已导入。之前的存档已复制到："]),
+     ("Save imported.", ["Partida importada.", "Sauvegarde importée.", "Spielstand importiert.", "Salvataggio importato.", "インポートしました。", "存档已导入。"]),
+     ("The save could not be imported:", ["No se pudo importar la partida:", "Impossible d'importer la sauvegarde :", "Der Spielstand konnte nicht importiert werden:", "Impossibile importare il salvataggio:", "セーブをインポートできませんでした:", "无法导入存档："]),
++    ("The server could not be started:", ["No se pudo iniciar el servidor:", "Impossible de démarrer le serveur :", "Der Server konnte nicht gestartet werden:", "Impossibile avviare il server:", "サーバーを起動できませんでした:", "无法启动服务器："]),
++    ("Public server on this PC", ["Servidor público en este PC", "Serveur public sur ce PC", "Öffentlicher Server auf diesem PC", "Server pubblico su questo PC", "このPCで公開サーバー", "在本机运行公共服务器"]),
++    ("Opens 6 public rooms that anyone can see and join from Public rooms, while the game is open. Only needed for communities: to play with friends, Create online room is enough.", ["Abre 6 salas públicas que cualquiera puede ver y unirse desde Salas públicas, mientras el juego esté abierto. Solo hace falta para comunidades: para jugar con amigos basta con Crear sala online.", "Ouvre 6 salons publics visibles et accessibles depuis Salons publics, tant que le jeu est ouvert. Utile seulement pour les communautés : entre amis, Créer un salon en ligne suffit.", "Öffnet 6 öffentliche Räume, die jeder unter Öffentliche Räume sehen und betreten kann, solange das Spiel läuft. Nur für Communities nötig: Mit Freunden reicht Online-Raum erstellen.", "Apre 6 stanze pubbliche che chiunque può vedere e raggiungere da Stanze pubbliche, finché il gioco è aperto. Serve solo per le community: con gli amici basta Crea stanza online.", "ゲーム起動中、誰でも「公開ルーム」から見て参加できる公開ルームを6つ開きます。コミュニティ向けの機能で、友達と遊ぶだけなら「オンラインルームを作成」で十分です。", "在游戏运行期间开启 6 个公共房间，任何人都可在“公开房间”中看到并加入。仅社区需要：和好友玩只需“创建在线房间”。"]),
++    ("Open public server on this PC", ["Abrir servidor público en este PC", "Ouvrir un serveur public sur ce PC", "Öffentlichen Server auf diesem PC öffnen", "Apri server pubblico su questo PC", "このPCで公開サーバーを開く", "在本机开启公共服务器"]),
++    ("Server address", ["Dirección del servidor", "Adresse du serveur", "Serveradresse", "Indirizzo del server", "サーバーアドレス", "服务器地址"]),
++    ("Others write it in Public rooms, Server, and see your rooms.", ["Los demás la escriben en Salas públicas, Servidor, y ven tus salas.", "Les autres la saisissent dans Salons publics, Serveur, et voient vos salons.", "Andere geben sie unter Öffentliche Räume, Server ein und sehen deine Räume.", "Gli altri la scrivono in Stanze pubbliche, Server, e vedono le tue stanze.", "他の人は「公開ルーム」の「サーバー」に入力すると、あなたのルームが表示されます。", "其他人在“公开房间”的“服务器”中输入即可看到你的房间。"]),
++    ("The router could not be opened by itself. Others can only come in if you open these ports to this PC:", ["El router no se pudo abrir solo. Los demás solo podrán entrar si abres en tu router estos puertos hacia este PC:", "Le routeur n'a pas pu s'ouvrir seul. Les autres ne pourront entrer que si vous ouvrez ces ports vers ce PC :", "Der Router konnte nicht automatisch geöffnet werden. Andere können nur beitreten, wenn du diese Ports zu diesem PC öffnest:", "Il router non si è potuto aprire da solo. Gli altri potranno entrare solo se apri queste porte verso questo PC:", "ルーターを自動で開放できませんでした。このPCへ次のポートを開放すると参加できます:", "无法自动开放路由器。只有将这些端口转发到本机，其他人才能加入："]),
++    ("Close the server", ["Cerrar el servidor", "Fermer le serveur", "Server schließen", "Chiudi il server", "サーバーを閉じる", "关闭服务器"]),
      ("Nickname", ["Apodo", "Pseudo", "Spitzname", "Soprannome", "ニックネーム", "昵称"]),
      ("In the room", ["En la sala", "Dans le salon", "Im Raum", "Nella stanza", "ルーム:", "所在房间"]),
      ("playing", ["jugando a", "joue à", "spielt", "gioca a", "プレイ中:", "正在玩"]),

@@ -6,7 +6,7 @@
 
 <p align="center">🇬🇧 <a href="README.md">Read in English</a></p>
 
-<p align="center"><b>Versión 0.5.0</b> · en desarrollo · <a href="CHANGELOG.md">registro de cambios</a></p>
+<p align="center"><b>Versión 0.5.1</b> · en desarrollo · <a href="CHANGELOG.md">registro de cambios</a></p>
 
 <p align="center">
   <b>Port nativo para PC (Windows x64) de <i>Dragon Ball Z: Extreme Butoden</i> de 3DS</b><br>
@@ -107,8 +107,10 @@ Jugar.exe    abre el juego
 ## 🌐 Jugar online
 **Con amigos (recomendado):** *Esc → Online → Crear sala online* y comparte el **código de sala**. Tus amigos van a *Online → Código de sala o dirección*, lo escriben y pulsan **Unirse**. No hace falta descargar nada más.
 
-**Servidor de salas (opcional):** para comunidades que quieran salas abiertas las 24 horas, en el Release también va **`ExtremeFighters_Servidor.zip`**: un programa pequeño (Windows y Linux) que mantiene varias salas abiertas y publica su lista.
-1. Arráncalo en un PC que esté encendido o en un servidor (VPS): `Iniciar_servidor.bat` en Windows, `./ef-servidor-linux` en Linux.
+**Servidor público en tu PC (opcional):** *Online → Abrir servidor público en este PC* abre 6 salas públicas mientras el juego está abierto, abre el router solo (UPnP) y muestra la dirección para compartir. Los demás la escriben en *Salas públicas → Servidor*.
+
+**Servidor 24/7 (opcional):** el mismo servidor se instala en la carpeta `servidor` de tu instalación, para tener salas abiertas sin el juego:
+1. Arráncalo en un PC que esté encendido o en un servidor (VPS): `Iniciar_servidor.bat` en Windows, `./ef-servidor-linux` en Linux (se compila con `herramientas/compilar.sh`).
 2. Abre los puertos TCP **24872-24878** en el router o el cortafuegos de ese equipo.
 3. Compruébalo en el navegador: `http://TU-IP:24872/`.
 4. En el juego: *Online → Salas públicas → Servidor*: escribe la IP o dominio → **Actualizar** → **Unirse**.

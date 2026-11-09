@@ -1,4 +1,4 @@
-EXTREME FIGHTERS v0.5.0 - port nativo de Dragon Ball Z: Extreme Butoden (3DS)
+EXTREME FIGHTERS v0.5.1 - port nativo de Dragon Ball Z: Extreme Butoden (3DS)
 ====================================================================
 
 COMO INSTALAR
@@ -37,7 +37,7 @@ ZAKURO EDICION DBZ (incluido, no se descarga)
   - Actualizaciones automaticas: boton ACTUALIZAR en el instalador y
     "Buscar actualizaciones" en el menu de pausa del juego.
   - Online > Salas publicas: escribe la direccion de un servidor de salas
-    de Extreme Fighters y unete con un clic (ver ExtremeFighters_Servidor).
+    de Extreme Fighters y unete con un clic (o abre tu propio servidor desde Online).
 
 100% PORTATIL: todo queda dentro de la carpeta de instalacion
   juego\        copia de tu .3ds
