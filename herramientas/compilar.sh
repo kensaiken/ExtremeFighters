@@ -42,6 +42,7 @@ rm -f "$L/bola.ico"
 
 # 4) Script del instalador, imagenes y LEEME
 cp "$REPO/instalador/instalador.ps1" "$OUT/"
+cp "$REPO/instalador/actualizar.ps1" "$OUT/bin/"
 cp "$REPO/instalador/assets/"* "$OUT/assets/"
 cp "$REPO/LEEME.txt" "$OUT/"
 (cd "$REPO" && rm -f ExtremeFighters_Instalador.zip && zip -qr9 ExtremeFighters_Instalador.zip ExtremeFighters_Instalador)

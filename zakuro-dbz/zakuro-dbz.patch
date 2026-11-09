@@ -1,7 +1,7 @@
 From 2f6af48ecccb5f48d41acb574d61e9f92c021817 Mon Sep 17 00:00:00 2001
 From: Extreme Fighters <noreply@example.com>
 Date: Mon, 9 Nov 2026 11:26:08 +0000
-Subject: [PATCH 1/3] Extreme Fighters: Zakuro DBZ edition (translated themed
+Subject: [PATCH 1/5] Extreme Fighters: Zakuro DBZ edition (translated themed
  menus, touch buttons for character cards, Online)
 
 ---
@@ -1201,7 +1201,7 @@ index 0000000..940dbe2
 From 8e3ae3142a51d7de2971d1a5119a568daa383d10 Mon Sep 17 00:00:00 2001
 From: Extreme Fighters <noreply@example.com>
 Date: Mon, 9 Nov 2026 14:18:08 +0000
-Subject: [PATCH 2/3] Extreme Fighters 0.2.1: learn the card controls from the
+Subject: [PATCH 2/5] Extreme Fighters 0.2.1: learn the card controls from the
  controller itself, live indicator
 
 ---
@@ -1541,7 +1541,7 @@ index 940dbe2..213e63b 100644
 From e904c3e353303439aca7b9bb7fdd4423b4c69cdc Mon Sep 17 00:00:00 2001
 From: Extreme Fighters <noreply@example.com>
 Date: Mon, 9 Nov 2026 14:31:00 +0000
-Subject: [PATCH 3/3] Extreme Fighters 0.3.0: full top screen with small bottom
+Subject: [PATCH 3/5] Extreme Fighters 0.3.0: full top screen with small bottom
  overlay, graphics quality presets, public room list and room server
 
 ---
@@ -2241,6 +2241,1592 @@ index 213e63b..608897e 100644
      ("Top over bottom", ["Superior sobre inferior", "Haut au-dessus du bas", "Oben über unten", "Superiore sopra inferiore", "上下に並べる", "上下排列"]),
      ("Screens side by side", ["Pantallas lado a lado", "Écrans côte à côte", "Nebeneinander", "Schermi affiancati", "左右に並べる", "左右排列"]),
      ("Top screen only", ["Solo pantalla superior", "Écran du haut seul", "Nur oberer Bildschirm", "Solo schermo superiore", "上画面のみ", "仅上屏"]),
+-- 
+2.43.0
+
+
+From 10f0dd1cb95b0d88009a807b19c9d10005ab3f57 Mon Sep 17 00:00:00 2001
+From: Extreme Fighters <noreply@example.com>
+Date: Mon, 9 Nov 2026 18:59:17 +0000
+Subject: [PATCH 4/5] Extreme Fighters 0.4.0: online rooms that open the router
+ (UPnP), room codes, CG-NAT warning, ping, update checker
+
+---
+ Cargo.lock                  | 352 ++++++++++++++++++++++++++++++++++++
+ crates/zakuro/Cargo.toml    |   1 +
+ crates/zakuro/src/lib.rs    |  75 +++++++-
+ crates/zakuro/src/lobby.rs  |  12 +-
+ crates/zakuro/src/menus.rs  |  89 ++++++++-
+ crates/zakuro/src/online.rs | 252 ++++++++++++++++++++++++++
+ crates/zakuro/src/tr.rs     |  18 ++
+ 7 files changed, 792 insertions(+), 7 deletions(-)
+ create mode 100644 crates/zakuro/src/online.rs
+
+diff --git a/Cargo.lock b/Cargo.lock
+index 3f5b443..6bd25c7 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -243,12 +243,30 @@ version = "1.1.2"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
+ 
++[[package]]
++name = "attohttpc"
++version = "0.30.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "16e2cdb6d5ed835199484bb92bb8b3edd526effe995c61732580439c1a67e2e9"
++dependencies = [
++ "base64",
++ "http",
++ "log",
++ "url",
++]
++
+ [[package]]
+ name = "autocfg"
+ version = "1.5.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
+ 
++[[package]]
++name = "base64"
++version = "0.22.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
++
+ [[package]]
+ name = "bindgen"
+ version = "0.65.1"
+@@ -490,6 +508,17 @@ dependencies = [
+  "libc",
+ ]
+ 
++[[package]]
++name = "chacha20"
++version = "0.10.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "65c35e4b699c7e15ccbe7ee35c005e4fc0a278d22238a2857e6ce2dadeda1b06"
++dependencies = [
++ "cfg-if 1.0.5",
++ "cpufeatures 0.3.1",
++ "rand_core",
++]
++
+ [[package]]
+ name = "chrono"
+ version = "0.4.45"
+@@ -1128,6 +1157,17 @@ dependencies = [
+  "objc2 0.6.4",
+ ]
+ 
++[[package]]
++name = "displaydoc"
++version = "0.2.7"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "c6232dd377dcc64799954cbd3a9bb882e9cdc1308ccd87b1c098f1fb2eaf82a8"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn 3.0.6",
++]
++
+ [[package]]
+ name = "dlib"
+ version = "0.5.3"
+@@ -1436,6 +1476,15 @@ version = "0.3.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
+ 
++[[package]]
++name = "form_urlencoded"
++version = "1.2.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
++dependencies = [
++ "percent-encoding",
++]
++
+ [[package]]
+ name = "futures-core"
+ version = "0.3.34"
+@@ -1520,6 +1569,7 @@ dependencies = [
+  "cfg-if 1.0.5",
+  "libc",
+  "r-efi 6.0.0",
++ "rand_core",
+ ]
+ 
+ [[package]]
+@@ -1750,6 +1800,16 @@ dependencies = [
+  "windows-sys 0.61.2",
+ ]
+ 
++[[package]]
++name = "http"
++version = "1.5.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "918d3568bebf352712bc2ef3d46a8bcf1a75b373be6539de198e9105cbbf9ce0"
++dependencies = [
++ "bytes",
++ "itoa",
++]
++
+ [[package]]
+ name = "hybrid-array"
+ version = "0.4.15"
+@@ -1783,6 +1843,125 @@ dependencies = [
+  "cc",
+ ]
+ 
++[[package]]
++name = "icu_collections"
++version = "2.4.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "fe090a42a0d3140fed8c63263ed1fecc02422cb2f4bfe55cd8de2de1b8e105dd"
++dependencies = [
++ "displaydoc",
++ "potential_utf",
++ "utf8_iter",
++ "yoke",
++ "zerofrom",
++ "zerovec",
++]
++
++[[package]]
++name = "icu_locale_core"
++version = "2.4.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "25d29b57c17c6528d0dc4c2141cfa2d08200465acb537a3909c8b9b8a4a984c0"
++dependencies = [
++ "displaydoc",
++ "litemap",
++ "tinystr",
++ "writeable",
++ "zerovec",
++]
++
++[[package]]
++name = "icu_normalizer"
++version = "2.4.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "404a3b8c486f205c87fe7f23ab6894d84a4ad76d6e4671ae1981ba7def87c599"
++dependencies = [
++ "icu_collections",
++ "icu_normalizer_data",
++ "icu_properties",
++ "icu_provider",
++ "smallvec",
++ "zerovec",
++]
++
++[[package]]
++name = "icu_normalizer_data"
++version = "2.4.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "20f0088bfb7441f7a37fa0c9e20cb1e9cba1cac6b9ce8cd2a6dc44294f8e8cbc"
++
++[[package]]
++name = "icu_properties"
++version = "2.4.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "2ea83d991c56158f7cf898bf86436c1dfe7c07ee82fe88951f2695c9f37a379f"
++dependencies = [
++ "displaydoc",
++ "icu_collections",
++ "icu_locale_core",
++ "icu_properties_data",
++ "icu_provider",
++ "zerotrie",
++ "zerovec",
++]
++
++[[package]]
++name = "icu_properties_data"
++version = "2.4.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b98f29af82d02b163fe50161388350e743bb3107cc8e8c2f7314cb505faddfcf"
++
++[[package]]
++name = "icu_provider"
++version = "2.4.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "413099315636c588ee8f011190b329b971a09a8fae9d157e01dcae8379468514"
++dependencies = [
++ "displaydoc",
++ "icu_locale_core",
++ "writeable",
++ "yoke",
++ "zerofrom",
++ "zerotrie",
++ "zerovec",
++]
++
++[[package]]
++name = "idna"
++version = "1.1.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3b0875f23caa03898994f6ddc501886a45c7d3d62d04d2d90788d47be1b1e4de"
++dependencies = [
++ "idna_adapter",
++ "smallvec",
++ "utf8_iter",
++]
++
++[[package]]
++name = "idna_adapter"
++version = "1.2.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "cb68373c0d6620ef8105e855e7745e18b0d00d3bdb07fb532e434244cdb9a714"
++dependencies = [
++ "icu_normalizer",
++ "icu_properties",
++]
++
++[[package]]
++name = "igd-next"
++version = "0.18.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "c71312255fdc5364bff7eec0adf68146bc4e72aba85075261af40d234c11be99"
++dependencies = [
++ "attohttpc",
++ "log",
++ "rand",
++ "thiserror 2.0.20",
++ "url",
++ "xml-rs",
++ "xmltree",
++]
++
+ [[package]]
+ name = "image"
+ version = "0.25.10"
+@@ -2085,6 +2264,12 @@ version = "0.12.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
+ 
++[[package]]
++name = "litemap"
++version = "0.8.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "47d9d19d1d6efa0109d2f65ff4c85cddd50bd572e5a00127ab10987290bcefae"
++
+ [[package]]
+ name = "lock_api"
+ version = "0.4.14"
+@@ -2960,6 +3145,15 @@ dependencies = [
+  "serde",
+ ]
+ 
++[[package]]
++name = "potential_utf"
++version = "0.1.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d83eb9bc6d8e5cf568e7a1101d60ee05e81ed50ea106026f3d18deeb046d7661"
++dependencies = [
++ "zerovec",
++]
++
+ [[package]]
+ name = "pp-rs"
+ version = "0.2.1"
+@@ -3045,6 +3239,23 @@ version = "6.0.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
+ 
++[[package]]
++name = "rand"
++version = "0.10.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "65c9fb96cbc91e3478eaae79a69fcd3f1ae4ad052e471fe6732fff548984b4af"
++dependencies = [
++ "chacha20",
++ "getrandom 0.4.3",
++ "rand_core",
++]
++
++[[package]]
++name = "rand_core"
++version = "0.10.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
++
+ [[package]]
+ name = "raw-window-handle"
+ version = "0.6.2"
+@@ -3644,6 +3855,17 @@ dependencies = [
+  "unicode-ident",
+ ]
+ 
++[[package]]
++name = "synstructure"
++version = "0.14.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "901704edd0dfe137f1987838ee4f259e4e063c31371bdb423f7ae38ec6f77f02"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn 3.0.6",
++]
++
+ [[package]]
+ name = "target-lexicon"
+ version = "0.13.5"
+@@ -3729,6 +3951,16 @@ dependencies = [
+  "strict-num",
+ ]
+ 
++[[package]]
++name = "tinystr"
++version = "0.8.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "abc840c238154d58f9e86b2792261edfde565a17696e1cda1a449de27979801a"
++dependencies = [
++ "displaydoc",
++ "zerovec",
++]
++
+ [[package]]
+ name = "toml"
+ version = "1.1.6+spec-1.1.0"
+@@ -3845,12 +4077,39 @@ version = "0.2.6"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
+ 
++[[package]]
++name = "url"
++version = "2.5.8"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed"
++dependencies = [
++ "form_urlencoded",
++ "idna",
++ "percent-encoding",
++ "serde",
++]
++
++[[package]]
++name = "utf8_iter"
++version = "1.1.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "af3bd9d3e571c26fcce9d033b87ea5ab061b8d2ffe9b7a5675d810d68f03edf0"
++dependencies = [
++ "utf_types",
++]
++
+ [[package]]
+ name = "utf8parse"
+ version = "0.2.2"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
+ 
++[[package]]
++name = "utf_types"
++version = "1.0.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3a3b425286980a367278453f3b6d28cdcb134b574e5a35824a6ff5eebad50bb6"
++
+ [[package]]
+ name = "uuid"
+ version = "1.26.1"
+@@ -4577,6 +4836,12 @@ version = "0.57.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+ 
++[[package]]
++name = "writeable"
++version = "0.6.4"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
++
+ [[package]]
+ name = "x11-dl"
+ version = "2.21.0"
+@@ -4640,6 +4905,38 @@ version = "0.8.29"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
+ 
++[[package]]
++name = "xmltree"
++version = "0.10.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d7d8a75eaf6557bb84a65ace8609883db44a29951042ada9b393151532e41fcb"
++dependencies = [
++ "xml-rs",
++]
++
++[[package]]
++name = "yoke"
++version = "0.8.4"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "417ef3fcf6c300b7dbd25c85531a746931c02ad536f3cf4786ed1e88223340b3"
++dependencies = [
++ "stable_deref_trait",
++ "yoke-derive",
++ "zerofrom",
++]
++
++[[package]]
++name = "yoke-derive"
++version = "0.8.4"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ec8ebde2db3681e8c9980cc27822030e68752690ddfa9473e739aeb4dbde6d71"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn 3.0.6",
++ "synstructure",
++]
++
+ [[package]]
+ name = "zakuro"
+ version = "0.2.32"
+@@ -4652,6 +4949,7 @@ dependencies = [
+  "gilrs",
+  "glutin",
+  "glutin-winit",
++ "igd-next",
+  "image",
+  "log",
+  "nokhwa",
+@@ -4767,6 +5065,60 @@ dependencies = [
+  "syn 2.0.119",
+ ]
+ 
++[[package]]
++name = "zerofrom"
++version = "0.1.8"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "0ec05a11813ea801ff6d75110ad09cd0824ddba17dfe17128ea0d5f68e6c5272"
++dependencies = [
++ "zerofrom-derive",
++]
++
++[[package]]
++name = "zerofrom-derive"
++version = "0.1.8"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f75b4683f6c7f45248d4d64056a24298c6281e0993356d7d1b4a1a962ef10d4a"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn 3.0.6",
++ "synstructure",
++]
++
++[[package]]
++name = "zerotrie"
++version = "0.2.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4ea269c3bd32f0a32c321907a2ae912ba6f4649bb0fc764a15627e99a7095a3f"
++dependencies = [
++ "displaydoc",
++ "yoke",
++ "zerofrom",
++]
++
++[[package]]
++name = "zerovec"
++version = "0.11.9"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f58a2799cfe9a1670c7ea8edbd52ef8edb93cb37a7f83bf31ba9e35d9dae6a40"
++dependencies = [
++ "yoke",
++ "zerofrom",
++ "zerovec-derive",
++]
++
++[[package]]
++name = "zerovec-derive"
++version = "0.11.7"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "c3743ddbf47738d929cd1ae2e199d40d0162979dfe31aef8ae646d2bf00bf97a"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn 3.0.6",
++]
++
+ [[package]]
+ name = "zlib-rs"
+ version = "0.6.8"
+diff --git a/crates/zakuro/Cargo.toml b/crates/zakuro/Cargo.toml
+index 797b370..f52ddcd 100644
+--- a/crates/zakuro/Cargo.toml
++++ b/crates/zakuro/Cargo.toml
+@@ -34,6 +34,7 @@ image = { version = "0.25.10", default-features = false, features = ["png", "jpe
+ recomp3ds = { git = "https://github.com/fearkov/3dsrecomp" }
+ sha2 = "0.10"
+ gilrs = { version = "0.11.2", features = ["serde-serialize"] }
++igd-next = "0.18.0"
+ 
+ [dev-dependencies]
+ zakuro-fs = { workspace = true, features = ["testing"] }
+diff --git a/crates/zakuro/src/lib.rs b/crates/zakuro/src/lib.rs
+index 72c8068..5bf3d71 100644
+--- a/crates/zakuro/src/lib.rs
++++ b/crates/zakuro/src/lib.rs
+@@ -10,6 +10,7 @@ mod gui;
+ mod input;
+ mod library;
+ mod lobby;
++mod online;
+ mod menus;
+ mod present;
+ mod recompile;
+@@ -145,6 +146,10 @@ pub fn run_with(linked: Option<Linked>, overlay: Option<Box<dyn GameOverlay>>) {
+         stop: false,
+         camera: None,
+         room_server: None,
++        room_mapped: None,
++        reach_check: None,
++        update_check: None,
++        update_started: false,
+         room: None,
+         dlp_guest: None,
+         dlp_own: None,
+@@ -457,6 +462,13 @@ struct App {
+     camera: Option<(CameraSource, Option<PathBuf>)>,
+     /// the room this program holds open, and the one it is in.
+     room_server: Option<zakuro_core::room::Server>,
++    /// Extreme Fighters: the port the router was asked to let through for
++    /// this program's room, the answer being worked out, and the check for
++    /// a new version.
++    room_mapped: Option<u16>,
++    reach_check: Option<std::sync::mpsc::Receiver<online::Reach>>,
++    update_check: Option<std::sync::mpsc::Receiver<online::Update>>,
++    update_started: bool,
+     room: Option<zakuro_core::room::Connection>,
+     /// Download Play as a guest, while in a room with no game running.
+     dlp_guest: Option<zakuro_core::download_play::Guest>,
+@@ -1335,6 +1347,11 @@ impl App {
+                 }
+             }
+             Action::Quit => event_loop.exit(),
++            Action::CheckUpdates => self.check_updates(),
++            Action::Update => match online::start_updater() {
++                Ok(()) => event_loop.exit(),
++                Err(error) => self.menus.message = Some(format!("{}: {error}", tr::t("Could not start the update"))),
++            },
+             Action::Settings => self.apply_settings(),
+             Action::Keyboard(text, button) => {
+                 if let Some(game) = &mut self.game {
+@@ -1356,6 +1373,7 @@ impl App {
+         self.library.poll();
+         self.poll_jobs();
+         self.poll_gamepads();
++        self.poll_online();
+         // a room that went away takes the game's local wireless with it
+         if self.room.as_ref().is_some_and(|room| !room.open()) {
+             self.leave_room();
+@@ -1529,11 +1547,22 @@ impl App {
+         let password = self.menus.room_password.clone();
+         match zakuro_core::room::Server::start(self.settings.room_port, &name, &password, 16) {
+             Ok(server) => {
+-                let address = format!("127.0.0.1:{}", server.port());
++                let port = server.port();
++                let address = format!("127.0.0.1:{port}");
+                 self.room_server = Some(server);
+                 self.join_room(&address);
+                 if self.room.is_none() {
+                     self.room_server = None;
++                } else {
++                    // Extreme Fighters: the router opened and the room's code
++                    // worked out, away from the interface
++                    let (send, receive) = std::sync::mpsc::channel();
++                    let _ = std::thread::Builder::new().name("router".into()).spawn(move || {
++                        let _ = send.send(online::open(port));
++                    });
++                    self.reach_check = Some(receive);
++                    self.room_mapped = Some(port);
++                    self.menus.reach = None;
+                 }
+             }
+             Err(error) => self.menus.message = Some(format!("The room could not be opened on port {}, {error}", self.settings.room_port)),
+@@ -1542,6 +1571,9 @@ impl App {
+ 
+     /// joins the room at address.
+     fn join_room(&mut self, address: &str) {
++        // Extreme Fighters: a room code stands for its address
++        let decoded = online::decode_code(address);
++        let address = decoded.as_deref().unwrap_or(address);
+         let password = self.menus.room_password.clone();
+         match zakuro_core::room::Connection::join(address.trim(), &self.nickname(), &password) {
+             Ok(room) => {
+@@ -1552,8 +1584,49 @@ impl App {
+         }
+     }
+ 
++    /// Extreme Fighters: asks GitHub for a newer version, away from the
++    /// interface.
++    fn check_updates(&mut self) {
++        let (send, receive) = std::sync::mpsc::channel();
++        let _ = std::thread::Builder::new().name("update".into()).spawn(move || {
++            let _ = send.send(online::check());
++        });
++        self.update_check = Some(receive);
++        self.menus.update = None;
++        self.menus.update_busy = true;
++    }
++
++    /// Extreme Fighters: takes in what the router and GitHub answered.
++    fn poll_online(&mut self) {
++        if !self.update_started {
++            self.update_started = true;
++            if online::installed_version().is_some() {
++                self.check_updates();
++                self.menus.update_quiet = true;
++            }
++        }
++        if let Some(reach) = self.reach_check.as_ref().and_then(|check| check.try_recv().ok()) {
++            self.reach_check = None;
++            self.menus.reach = Some(reach);
++        }
++        if let Some(update) = self.update_check.as_ref().and_then(|check| check.try_recv().ok()) {
++            self.update_check = None;
++            self.menus.update_busy = false;
++            if let online::Update::Available(version) = &update {
++                self.menus.toast = Some((format!("{} v{version} — Esc", tr::t("New version available:")), Instant::now()));
++            }
++            self.menus.update_quiet = false;
++            self.menus.update = Some(update);
++        }
++    }
++
+     /// leaves the room, and closes it when it is this program's.
+     fn leave_room(&mut self) {
++        if let Some(port) = self.room_mapped.take() {
++            let _ = std::thread::Builder::new().name("router".into()).spawn(move || online::close(port));
++        }
++        self.reach_check = None;
++        self.menus.reach = None;
+         self.dlp_guest = None;
+         self.room = None;
+         self.room_server = None;
+diff --git a/crates/zakuro/src/lobby.rs b/crates/zakuro/src/lobby.rs
+index d0f816d..b222baf 100644
+--- a/crates/zakuro/src/lobby.rs
++++ b/crates/zakuro/src/lobby.rs
+@@ -18,6 +18,8 @@ pub struct LobbyRoom {
+     pub most: usize,
+     /// the game played in it, empty while nobody plays.
+     pub game: String,
++    /// how long reaching it takes, in milliseconds.
++    pub ping: Option<u32>,
+ }
+ 
+ /// the host of an address and its port, the list's when it has none.
+@@ -44,7 +46,13 @@ pub fn fetch(server: &str) -> Result<Vec<LobbyRoom>, String> {
+     let mut text = String::new();
+     stream.read_to_string(&mut text).map_err(|error| error.to_string())?;
+     let body = text.split_once("\r\n\r\n").map_or(text.as_str(), |(_, body)| body);
+-    parse(body, &host)
++    let mut rooms = parse(body, &host)?;
++    // the closest first
++    for room in &mut rooms {
++        room.ping = crate::online::ping(&room.address);
++    }
++    rooms.sort_by_key(|room| room.ping.unwrap_or(u32::MAX));
++    Ok(rooms)
+ }
+ 
+ fn parse(body: &str, host: &str) -> Result<Vec<LobbyRoom>, String> {
+@@ -60,7 +68,7 @@ fn parse(body: &str, host: &str) -> Result<Vec<LobbyRoom>, String> {
+             let most = fields.next()?.parse().ok()?;
+             let name = fields.next()?.to_owned();
+             let game = fields.next().unwrap_or("").to_owned();
+-            Some(LobbyRoom { name, address: format!("{host}:{port}"), players, most, game })
++            Some(LobbyRoom { name, address: format!("{host}:{port}"), players, most, game, ping: None })
+         })
+         .collect())
+ }
+diff --git a/crates/zakuro/src/menus.rs b/crates/zakuro/src/menus.rs
+index 73ebd6b..a353d5f 100644
+--- a/crates/zakuro/src/menus.rs
++++ b/crates/zakuro/src/menus.rs
+@@ -41,6 +41,9 @@ pub enum Action {
+     JoinRoom,
+     /// Extreme Fighters: join a public room at this address.
+     JoinRoomAt(String),
++    /// Extreme Fighters: ask for a newer version, and install it.
++    CheckUpdates,
++    Update,
+     LeaveRoom,
+     /// take part in the Download Play offer at this place in the list, or
+     /// leave the one taken part in.
+@@ -95,6 +98,14 @@ pub struct Menus {
+     lobby_loading: Option<Receiver<Result<Vec<crate::lobby::LobbyRoom>, String>>>,
+     lobby_error: Option<String>,
+     lobby_asked: bool,
++    /// Extreme Fighters: whether this program's room can be reached from
++    /// the internet and by which code, none while it is worked out.
++    pub reach: Option<crate::online::Reach>,
++    /// Extreme Fighters: what the last check for a new version found,
++    /// whether one runs, and whether it ran on its own at the start.
++    pub update: Option<crate::online::Update>,
++    pub update_busy: bool,
++    pub update_quiet: bool,
+     /// something to tell the user, until they close it.
+     pub message: Option<String>,
+     /// something to tell the user for a moment, over the game, and since
+@@ -510,6 +521,23 @@ impl Menus {
+                 if wide(ui, t("Cheats")) {
+                     self.cheats_open = true;
+                 }
++                // Extreme Fighters: updates
++                ui.add_space(6.0);
++                if let Some(crate::online::Update::Available(version)) = &self.update {
++                    let label = RichText::new(format!("⬆ {} v{version}", t("Update to"))).size(17.0).strong().color(Color32::BLACK);
++                    if ui.add_sized([250.0, 34.0], egui::Button::new(label).fill(crate::gui::ORANGE)).clicked() {
++                        actions.push(Action::Update);
++                    }
++                }
++                if ui.add_enabled(!self.update_busy, egui::Button::new(t("Check for updates")).min_size(Vec2::new(250.0, 28.0))).clicked() {
++                    actions.push(Action::CheckUpdates);
++                }
++                match (&self.update, self.update_busy) {
++                    (_, true) if !self.update_quiet => drop(ui.label(RichText::new(t("Checking…")).weak())),
++                    (Some(crate::online::Update::UpToDate), false) => drop(ui.label(RichText::new(t("You have the latest version.")).color(Color32::from_rgb(90, 220, 100)))),
++                    (Some(crate::online::Update::Failed(_)), false) => drop(ui.label(RichText::new(t("Could not check for updates.")).weak())),
++                    _ => {}
++                }
+                 ui.add_space(6.0);
+                 if wide(ui, t("Quit")) {
+                     actions.push(Action::Quit);
+@@ -613,6 +641,10 @@ impl Menus {
+                         };
+                     }
+                     ui.add_space(4.0);
++                    // Extreme Fighters: the code to share, and whether others can come in
++                    if room.port.is_some() {
++                        self.room_reach(ui);
++                    }
+                     let leave = if room.port.is_some() { t("Close the room") } else { t("Leave the room") };
+                     if ui.button(leave).clicked() {
+                         actions.push(Action::LeaveRoom);
+@@ -664,8 +696,8 @@ impl Menus {
+                     ui.separator();
+                     ui.label(RichText::new(t("Join a room")).strong());
+                     ui.horizontal(|ui| {
+-                        ui.label(t("Address"));
+-                        ui.add(egui::TextEdit::singleline(&mut settings.room_address).hint_text("192.168.0.10:24873"));
++                        ui.label(t("Room code or address"));
++                        ui.add(egui::TextEdit::singleline(&mut settings.room_address).hint_text("EF-XXXXX-XXXXX"));
+                     });
+                     ui.horizontal(|ui| {
+                         ui.label(t("Password"));
+@@ -685,7 +717,8 @@ impl Menus {
+                         ui.add(egui::DragValue::new(&mut settings.room_port).range(1024..=65535));
+                     });
+                     ui.label(RichText::new(t("The password above, when there is one, is the room's.")).weak());
+-                    if ui.button(t("Open")).clicked() {
++                    ui.label(RichText::new(t("The router is opened by itself when it allows it (UPnP), and you get a code to share.")).weak());
++                    if ui.add(egui::Button::new(RichText::new(t("Create online room")).strong()).min_size(Vec2::new(200.0, 30.0))).clicked() {
+                         actions.push(Action::HostRoom);
+                     }
+                 }
+@@ -698,6 +731,47 @@ impl Menus {
+         actions
+     }
+ 
++    /// Extreme Fighters: the code of this program's room and whether others
++    /// can reach it.
++    fn room_reach(&mut self, ui: &mut egui::Ui) {
++        use crate::online::Reach;
++        ui.add_space(4.0);
++        match &self.reach {
++            None => {
++                ui.label(RichText::new(t("Opening the router…")).weak());
++                ui.ctx().request_repaint();
++            }
++            Some(Reach::Open { code }) | Some(Reach::Manual { code, .. }) => {
++                ui.label(t("Room code"));
++                ui.horizontal(|ui| {
++                    ui.label(RichText::new(code).size(24.0).strong().monospace().color(crate::gui::ORANGE));
++                    if ui.button(t("Copy")).clicked() {
++                        ui.ctx().copy_text(code.clone());
++                    }
++                });
++                ui.label(RichText::new(t("Share this code: your friends write it in Online, Room code or address, and join.")).weak());
++                match &self.reach {
++                    Some(Reach::Open { .. }) => drop(ui.label(RichText::new(t("✔ Router opened by itself (UPnP).")).color(Color32::from_rgb(90, 220, 100)))),
++                    Some(Reach::Manual { port, .. }) => drop(ui.label(
++                        RichText::new(format!("{} {port} (TCP).", t("The router could not be opened by itself. Others can only come in if you open this port to this PC:")))
++                            .color(ORANGE_SOFT),
++                    )),
++                    _ => {}
++                }
++            }
++            Some(Reach::Unreachable) => {
++                ui.label(
++                    RichText::new(t("Your internet connection can't receive players (your provider uses CG-NAT). Join someone else's room, or use a public room server."))
++                        .color(Color32::from_rgb(255, 110, 100)),
++                );
++            }
++            Some(Reach::Offline) => {
++                ui.label(RichText::new(t("No internet connection could be found.")).color(Color32::from_rgb(255, 110, 100)));
++            }
++        }
++        ui.add_space(4.0);
++    }
++
+     /// Extreme Fighters: the public rooms of a room server, to join with a
+     /// click, fetched away from the interface.
+     fn public_rooms(&mut self, ui: &mut egui::Ui, settings: &mut Settings, actions: &mut Vec<Action>) {
+@@ -745,9 +819,16 @@ impl Menus {
+         } else if self.lobby_rooms.is_empty() {
+             ui.label(RichText::new(t("No rooms on this server.")).weak());
+         }
+-        egui::Grid::new("public rooms").num_columns(4).spacing([12.0, 6.0]).show(ui, |ui| {
++        egui::Grid::new("public rooms").num_columns(5).spacing([12.0, 6.0]).show(ui, |ui| {
+             for room in &self.lobby_rooms {
+                 ui.label(RichText::new(&room.name).strong());
++                match room.ping {
++                    Some(ms) => {
++                        let color = if ms < 60 { Color32::from_rgb(90, 220, 100) } else if ms < 120 { ORANGE_SOFT } else { Color32::from_rgb(255, 110, 100) };
++                        ui.label(RichText::new(format!("{ms} ms")).color(color));
++                    }
++                    None => drop(ui.label(RichText::new("— ms").weak())),
++                }
+                 let full = room.players >= room.most;
+                 let color = if full { Color32::from_rgb(255, 110, 100) } else if room.players > 0 { ORANGE_SOFT } else { Color32::from_rgb(90, 220, 100) };
+                 ui.label(RichText::new(format!("{}/{} {}", room.players, room.most, t("players"))).color(color));
+diff --git a/crates/zakuro/src/online.rs b/crates/zakuro/src/online.rs
+new file mode 100644
+index 0000000..2e8b812
+--- /dev/null
++++ b/crates/zakuro/src/online.rs
+@@ -0,0 +1,252 @@
++//! Extreme Fighters: online rooms that open the router by themselves
++//! (UPnP), room codes to share instead of addresses, telling when a
++//! connection can't take players (CG-NAT), and checking for new versions.
++
++use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpStream, UdpSocket};
++use std::process::{Command, Stdio};
++use std::time::{Duration, Instant};
++
++/// the repository whose releases are Extreme Fighters' versions.
++pub const REPOSITORY: &str = "kensaiken/ExtremeFighters";
++
++/// Crockford's base 32, no letters that look like digits.
++const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
++
++/// a room code for an IPv4 address and port: EF-XXXXX-XXXXX, the 48 bits
++/// of both in base 32.
++pub fn encode_code(ip: Ipv4Addr, port: u16) -> String {
++    let value = (u64::from(u32::from(ip)) << 16) | u64::from(port);
++    let digits: String = (0..10).rev().map(|i| ALPHABET[((value >> (i * 5)) & 31) as usize] as char).collect();
++    format!("EF-{}-{}", &digits[..5], &digits[5..])
++}
++
++/// the address a room code stands for, none when it isn't one.
++pub fn decode_code(code: &str) -> Option<String> {
++    let cleaned: String = code.trim().to_ascii_uppercase().chars().filter(|c| c.is_ascii_alphanumeric()).collect();
++    let digits = cleaned.strip_prefix("EF")?;
++    if digits.len() != 10 {
++        return None;
++    }
++    let mut value = 0u64;
++    for c in digits.chars() {
++        // the letters people mistake for digits count as them
++        let c = match c {
++            'O' => '0',
++            'I' | 'L' => '1',
++            c => c,
++        };
++        value = (value << 5) | ALPHABET.iter().position(|&a| a as char == c)? as u64;
++    }
++    let ip = Ipv4Addr::from((value >> 16) as u32);
++    let port = (value & 0xFFFF) as u16;
++    (port != 0 && !ip.is_unspecified()).then(|| format!("{ip}:{port}"))
++}
++
++/// whether an address can't be reached from the internet: private,
++/// CG-NAT's 100.64.0.0/10, loopback or link-local.
++pub fn is_private(ip: Ipv4Addr) -> bool {
++    let [a, b, ..] = ip.octets();
++    ip.is_private() || ip.is_loopback() || ip.is_link_local() || (a == 100 && (64..128).contains(&b))
++}
++
++/// what opening a room to the internet came to.
++#[derive(Debug, Clone, PartialEq)]
++pub enum Reach {
++    /// the router opened the port, the code reaches the room.
++    Open { code: String },
++    /// the router could not be asked, the port has to be opened by hand;
++    /// the code is right once it is.
++    Manual { code: String, port: u16 },
++    /// a router behind another one, the provider's (CG-NAT): nobody from
++    /// the internet can reach this computer.
++    Unreachable,
++    /// no way to tell the address, no internet say.
++    Offline,
++}
++
++/// the address this computer has on the internet, asked of a service that
++/// tells it, through curl, which Windows 10 and later have.
++pub fn public_ip() -> Option<Ipv4Addr> {
++    for url in ["https://api.ipify.org", "https://ifconfig.me/ip", "https://icanhazip.com"] {
++        if let Some(text) = curl(url, 6) {
++            if let Ok(ip) = text.trim().parse() {
++                return Some(ip);
++            }
++        }
++    }
++    None
++}
++
++/// asks the router to let port through to this computer and works out
++/// whether the room can be reached and by which code.
++pub fn open(port: u16) -> Reach {
++    let mapped = map_port(port);
++    let public = public_ip();
++    match (mapped, public) {
++        (Ok(external), Some(public)) if external == public => Reach::Open { code: encode_code(public, port) },
++        // the router's own address is not the internet's: another router,
++        // the provider's, sits in between
++        (Ok(external), Some(_)) if is_private(external) => Reach::Unreachable,
++        (Ok(_), Some(public)) => Reach::Manual { code: encode_code(public, port), port },
++        (Ok(external), None) if !is_private(external) => Reach::Open { code: encode_code(external, port) },
++        (Ok(_), None) => Reach::Unreachable,
++        (Err(error), Some(public)) => {
++            log::info!("the router could not be opened, {error}");
++            Reach::Manual { code: encode_code(public, port), port }
++        }
++        (Err(_), None) => Reach::Offline,
++    }
++}
++
++/// maps port on the router to this computer, returns the router's address
++/// on the outside.
++fn map_port(port: u16) -> Result<Ipv4Addr, String> {
++    let mut options = igd_next::SearchOptions::default();
++    options.timeout = Some(Duration::from_secs(3));
++    let gateway = igd_next::search_gateway(options).map_err(|error| error.to_string())?;
++    let local = local_ip(gateway.addr).ok_or("no local address")?;
++    let external = match gateway.get_external_ip().map_err(|error| error.to_string())? {
++        std::net::IpAddr::V4(ip) => ip,
++        std::net::IpAddr::V6(_) => return Err("the router speaks IPv6 only".into()),
++    };
++    let local = SocketAddr::V4(SocketAddrV4::new(local, port));
++    gateway
++        .add_port(igd_next::PortMappingProtocol::TCP, port, local, 0, "Extreme Fighters")
++        .map_err(|error| error.to_string())?;
++    log::info!("the router lets port {port} through to {local}, outside {external}");
++    Ok(external)
++}
++
++/// takes back what map_port asked of the router.
++pub fn close(port: u16) {
++    let mut options = igd_next::SearchOptions::default();
++    options.timeout = Some(Duration::from_secs(2));
++    if let Ok(gateway) = igd_next::search_gateway(options) {
++        let _ = gateway.remove_port(igd_next::PortMappingProtocol::TCP, port);
++    }
++}
++
++/// this computer's address toward the router.
++fn local_ip(router: SocketAddr) -> Option<Ipv4Addr> {
++    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
++    socket.connect(router).ok()?;
++    match socket.local_addr().ok()?.ip() {
++        std::net::IpAddr::V4(ip) => Some(ip),
++        std::net::IpAddr::V6(_) => None,
++    }
++}
++
++/// how long connecting to an address takes, in milliseconds.
++pub fn ping(address: &str) -> Option<u32> {
++    use std::net::ToSocketAddrs;
++    let address = address.to_socket_addrs().ok()?.next()?;
++    let start = Instant::now();
++    let stream = TcpStream::connect_timeout(&address, Duration::from_secs(2)).ok()?;
++    let took = start.elapsed().as_millis() as u32;
++    drop(stream);
++    Some(took)
++}
++
++/// the text at url, through curl, none when it fails.
++fn curl(url: &str, seconds: u32) -> Option<String> {
++    let mut command = Command::new("curl");
++    command
++        .args(["-fsSL", "--max-time", &seconds.to_string(), "-A", "ExtremeFighters", "-H", "Accept: application/vnd.github+json", url])
++        .stdin(Stdio::null())
++        .stderr(Stdio::null());
++    #[cfg(windows)]
++    {
++        use std::os::windows::process::CommandExt;
++        // no console window flashing up
++        command.creation_flags(0x0800_0000);
++    }
++    let output = command.output().ok().filter(|output| output.status.success())?;
++    String::from_utf8(output.stdout).ok()
++}
++
++/// the folder Extreme Fighters is installed in, the one above Zakuro's.
++pub fn install_dir() -> Option<std::path::PathBuf> {
++    let exe = std::env::current_exe().ok()?;
++    Some(exe.parent()?.parent()?.to_path_buf())
++}
++
++/// the installed version, as the installer wrote it.
++pub fn installed_version() -> Option<String> {
++    let text = std::fs::read_to_string(install_dir()?.join("ef_version.txt")).ok()?;
++    Some(text.trim().trim_start_matches('v').to_owned()).filter(|version| !version.is_empty())
++}
++
++/// a version's numbers, to compare them.
++fn numbers(version: &str) -> Vec<u32> {
++    version.trim().trim_start_matches('v').split(['.', '-']).map_while(|part| part.parse().ok()).collect()
++}
++
++pub fn newer(latest: &str, current: &str) -> bool {
++    numbers(latest) > numbers(current)
++}
++
++/// the latest release's version, asked of GitHub.
++pub fn latest_version() -> Result<String, String> {
++    let text = curl(&format!("https://api.github.com/repos/{REPOSITORY}/releases/latest"), 8).ok_or("GitHub could not be reached")?;
++    let at = text.find("\"tag_name\"").ok_or("no version in the answer")?;
++    let rest = &text[at + "\"tag_name\"".len()..];
++    let start = rest.find('"').ok_or("no version in the answer")? + 1;
++    let end = rest[start..].find('"').ok_or("no version in the answer")? + start;
++    Ok(rest[start..end].trim_start_matches('v').to_owned())
++}
++
++/// what checking for a new version found: the latest version when it is
++/// newer than the one installed.
++#[derive(Debug, Clone, PartialEq)]
++pub enum Update {
++    Available(String),
++    UpToDate,
++    Failed(String),
++}
++
++pub fn check() -> Update {
++    let Some(current) = installed_version() else { return Update::Failed("the installed version is unknown".into()) };
++    match latest_version() {
++        Ok(latest) if newer(&latest, &current) => Update::Available(latest),
++        Ok(_) => Update::UpToDate,
++        Err(error) => Update::Failed(error),
++    }
++}
++
++/// starts the updater of the install folder, which waits for Zakuro to
++/// close, downloads the latest version and installs it.
++pub fn start_updater() -> Result<(), String> {
++    let dir = install_dir().ok_or("no install folder")?;
++    let script = dir.join("actualizar.ps1");
++    if !script.is_file() {
++        return Err("actualizar.ps1 is missing, run the installer again".into());
++    }
++    let mut command = Command::new("powershell.exe");
++    command.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-STA", "-WindowStyle", "Hidden", "-File"]).arg(&script).arg("-Jugar");
++    command.spawn().map(drop).map_err(|error| error.to_string())
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn codes_go_both_ways() {
++        let code = encode_code(Ipv4Addr::new(85, 10, 20, 30), 24873);
++        assert_eq!(code.len(), 14);
++        assert_eq!(decode_code(&code).as_deref(), Some("85.10.20.30:24873"));
++        assert_eq!(decode_code(&code.to_lowercase().replace('-', " ")).as_deref(), Some("85.10.20.30:24873"));
++        assert_eq!(decode_code("hello"), None);
++        assert_eq!(decode_code("192.168.0.10:24873"), None);
++    }
++
++    #[test]
++    fn versions_and_addresses() {
++        assert!(newer("0.4.1", "0.4.0"));
++        assert!(newer("v0.10.0", "0.9.9"));
++        assert!(!newer("0.4.0", "0.4.0"));
++        assert!(is_private(Ipv4Addr::new(100, 72, 1, 2)));
++        assert!(is_private(Ipv4Addr::new(192, 168, 1, 2)));
++        assert!(!is_private(Ipv4Addr::new(85, 10, 20, 30)));
++    }
++}
+diff --git a/crates/zakuro/src/tr.rs b/crates/zakuro/src/tr.rs
+index 608897e..1aac6ec 100644
+--- a/crates/zakuro/src/tr.rs
++++ b/crates/zakuro/src/tr.rs
+@@ -118,6 +118,24 @@ const TABLE: &[(&str, [&str; 6])] = &[
+     ("No rooms on this server.", ["Este servidor no tiene salas.", "Aucun salon sur ce serveur.", "Keine Räume auf diesem Server.", "Nessuna stanza su questo server.", "このサーバーにはルームがありません。", "该服务器没有房间。"]),
+     ("players", ["jugadores", "joueurs", "Spieler", "giocatori", "人", "名玩家"]),
+     ("waiting", ["esperando", "en attente", "wartet", "in attesa", "待機中", "等待中"]),
++    ("Update to", ["Actualizar a", "Mettre à jour vers", "Aktualisieren auf", "Aggiorna a", "アップデート:", "更新到"]),
++    ("Check for updates", ["Buscar actualizaciones", "Rechercher des mises à jour", "Nach Updates suchen", "Cerca aggiornamenti", "アップデートを確認", "检查更新"]),
++    ("Checking…", ["Comprobando…", "Vérification…", "Wird geprüft…", "Verifica…", "確認中…", "正在检查…"]),
++    ("You have the latest version.", ["Tienes la última versión.", "Vous avez la dernière version.", "Du hast die neueste Version.", "Hai l'ultima versione.", "最新バージョンです。", "已是最新版本。"]),
++    ("Could not check for updates.", ["No se pudieron buscar actualizaciones.", "Impossible de rechercher des mises à jour.", "Updates konnten nicht geprüft werden.", "Impossibile cercare aggiornamenti.", "アップデートを確認できませんでした。", "无法检查更新。"]),
++    ("Could not start the update", ["No se pudo iniciar la actualización", "Impossible de lancer la mise à jour", "Das Update konnte nicht gestartet werden", "Impossibile avviare l'aggiornamento", "アップデートを開始できませんでした", "无法开始更新"]),
++    ("New version available:", ["Nueva versión disponible:", "Nouvelle version disponible :", "Neue Version verfügbar:", "Nuova versione disponibile:", "新しいバージョンがあります:", "有新版本可用："]),
++    ("Room code or address", ["Código de sala o dirección", "Code du salon ou adresse", "Raumcode oder Adresse", "Codice stanza o indirizzo", "ルームコードまたはアドレス", "房间代码或地址"]),
++    ("The router is opened by itself when it allows it (UPnP), and you get a code to share.", ["El router se abre solo si lo permite (UPnP) y te da un código para compartir.", "Le routeur s'ouvre tout seul s'il le permet (UPnP) et vous obtenez un code à partager.", "Der Router wird automatisch geöffnet, wenn er es erlaubt (UPnP), und du bekommst einen Code zum Teilen.", "Il router si apre da solo se lo consente (UPnP) e ottieni un codice da condividere.", "ルーターが対応していれば自動で開放され（UPnP）、共有用のコードが表示されます。", "路由器支持时会自动开放端口（UPnP），并生成可分享的代码。"]),
++    ("Create online room", ["Crear sala online", "Créer un salon en ligne", "Online-Raum erstellen", "Crea stanza online", "オンラインルームを作成", "创建在线房间"]),
++    ("Opening the router…", ["Abriendo el router…", "Ouverture du routeur…", "Router wird geöffnet…", "Apertura del router…", "ルーターを開放中…", "正在开放路由器…"]),
++    ("Room code", ["Código de sala", "Code du salon", "Raumcode", "Codice stanza", "ルームコード", "房间代码"]),
++    ("Copy", ["Copiar", "Copier", "Kopieren", "Copia", "コピー", "复制"]),
++    ("Share this code: your friends write it in Online, Room code or address, and join.", ["Comparte este código: tus amigos lo escriben en Online, en «Código de sala o dirección», y se unen.", "Partagez ce code : vos amis le saisissent dans En ligne, « Code du salon ou adresse », et rejoignent.", "Teile diesen Code: Deine Freunde geben ihn unter Online bei „Raumcode oder Adresse“ ein und treten bei.", "Condividi questo codice: i tuoi amici lo scrivono in Online, «Codice stanza o indirizzo», e si uniscono.", "このコードを共有してください。友達はオンラインの「ルームコードまたはアドレス」に入力して参加できます。", "分享此代码：好友在“在线”的“房间代码或地址”中输入即可加入。"]),
++    ("✔ Router opened by itself (UPnP).", ["✔ Router abierto automáticamente (UPnP).", "✔ Routeur ouvert automatiquement (UPnP).", "✔ Router automatisch geöffnet (UPnP).", "✔ Router aperto automaticamente (UPnP).", "✔ ルーターを自動で開放しました（UPnP）。", "✔ 已自动开放路由器（UPnP）。"]),
++    ("The router could not be opened by itself. Others can only come in if you open this port to this PC:", ["El router no se pudo abrir solo. Los demás solo podrán entrar si abres en tu router este puerto hacia este PC:", "Le routeur n'a pas pu s'ouvrir seul. Les autres ne pourront entrer que si vous ouvrez ce port vers ce PC :", "Der Router konnte nicht automatisch geöffnet werden. Andere können nur beitreten, wenn du diesen Port zu diesem PC öffnest:", "Il router non si è potuto aprire da solo. Gli altri potranno entrare solo se apri questa porta verso questo PC:", "ルーターを自動で開放できませんでした。このPCへ次のポートを開放すると参加できます:", "无法自动开放路由器。只有将此端口转发到本机，其他人才能加入："]),
++    ("Your internet connection can't receive players (your provider uses CG-NAT). Join someone else's room, or use a public room server.", ["Tu conexión no puede recibir jugadores (tu compañía usa CG-NAT). Únete a la sala de otro jugador o usa un servidor de salas público.", "Votre connexion ne peut pas recevoir de joueurs (votre fournisseur utilise le CG-NAT). Rejoignez le salon d'un autre joueur ou un serveur public.", "Deine Verbindung kann keine Spieler empfangen (dein Anbieter nutzt CG-NAT). Tritt dem Raum eines anderen bei oder nutze einen öffentlichen Raumserver.", "La tua connessione non può ricevere giocatori (il tuo provider usa CG-NAT). Unisciti alla stanza di un altro o usa un server pubblico.", "この回線ではプレイヤーを受け入れられません（プロバイダーがCG-NATを使用）。他の人のルームに参加するか、公開ルームサーバーを使ってください。", "你的网络无法接收其他玩家（运营商使用 CG-NAT）。请加入他人的房间或使用公共房间服务器。"]),
++    ("No internet connection could be found.", ["No se encontró conexión a internet.", "Aucune connexion internet trouvée.", "Keine Internetverbindung gefunden.", "Nessuna connessione a internet trovata.", "インターネット接続が見つかりません。", "未找到互联网连接。"]),
+     ("Nickname", ["Apodo", "Pseudo", "Spitzname", "Soprannome", "ニックネーム", "昵称"]),
+     ("In the room", ["En la sala", "Dans le salon", "Im Raum", "Nella stanza", "ルーム:", "所在房间"]),
+     ("playing", ["jugando a", "joue à", "spielt", "gioca a", "プレイ中:", "正在玩"]),
+-- 
+2.43.0
+
+
+From 463520df609b6ac1d4dd3a52df79346c4e0a758d Mon Sep 17 00:00:00 2001
+From: Extreme Fighters <noreply@example.com>
+Date: Mon, 9 Nov 2026 22:41:12 +0000
+Subject: [PATCH 5/5] Extreme Fighters 0.5.0: tap-based card controls with two
+ schemes, clickable card positions, save import
+
+---
+ crates/zakuro/src/gamepad.rs  | 100 +++++++++++++++++++++++++++++-----
+ crates/zakuro/src/lib.rs      |  72 +++++++++++++++++++++++-
+ crates/zakuro/src/menus.rs    |  50 ++++++++++++++++-
+ crates/zakuro/src/settings.rs |  27 +++++++--
+ crates/zakuro/src/tr.rs       |  23 ++++++++
+ 5 files changed, 248 insertions(+), 24 deletions(-)
+
+diff --git a/crates/zakuro/src/gamepad.rs b/crates/zakuro/src/gamepad.rs
+index 634ff6a..aafff69 100644
+--- a/crates/zakuro/src/gamepad.rs
++++ b/crates/zakuro/src/gamepad.rs
+@@ -5,7 +5,7 @@ use std::collections::HashMap;
+ use gilrs::{Axis, Button, EventType, Gilrs};
+ use zakuro_core::services::hid::{InputState, PadState};
+ 
+-use crate::settings::{PadButtons, RawControl, TouchButtons};
++use crate::settings::{PadButtons, RawControl, TouchButtons, TouchScheme};
+ 
+ /// how far a stick has to lean before it counts, some rest a little off
+ /// center.
+@@ -23,6 +23,12 @@ pub struct Gamepads {
+     /// value each axis had while learning.
+     learning: Option<(usize, HashMap<u32, f32>)>,
+     learned: Option<(usize, RawControl)>,
++    /// Extreme Fighters: the controls as they were last frame, the trigger
++    /// waiting a moment for the other, and the tap going on.
++    prev_held: [bool; 2],
++    prev_face: [bool; 4],
++    waiting: Option<(usize, u8)>,
++    tap: Option<((u16, u16), u8)>,
+ }
+ 
+ impl Gamepads {
+@@ -30,7 +36,7 @@ impl Gamepads {
+         let gilrs = Gilrs::new()
+             .inspect_err(|error| log::warn!("controllers are not available, {error}"))
+             .ok();
+-        Gamepads { gilrs, buttons, touch: TouchButtons::default(), raw: HashMap::new(), learning: None, learned: None }
++        Gamepads { gilrs, buttons, touch: TouchButtons::default(), raw: HashMap::new(), learning: None, learned: None, prev_held: [false; 2], prev_face: [false; 4], waiting: None, tap: None }
+     }
+ 
+     pub fn set_buttons(&mut self, buttons: PadButtons) {
+@@ -146,23 +152,89 @@ impl Gamepads {
+         })
+     }
+ 
++    /// Extreme Fighters: works out which card to touch this frame from the
++    /// two controls, and keeps touching it for a short tap, as a finger
++    /// would, however long the control is held.
++    fn cards(&mut self) -> Option<(u16, u16)> {
++        const TAP: u8 = 6;
++        const BOTH: u8 = 5;
++        let held = self.touch_held();
++        let rise = [held[0] && !self.prev_held[0], held[1] && !self.prev_held[1]];
++        self.prev_held = held;
++        let faces = [Button::West, Button::North, Button::East, Button::South];
++        let face_held: [bool; 4] = std::array::from_fn(|i| self.holding(faces[i]));
++        let face_rise: [bool; 4] = std::array::from_fn(|i| face_held[i] && !self.prev_face[i]);
++        self.prev_face = face_held;
++        let mut fire = None;
++        match self.touch.scheme {
++            TouchScheme::Triggers => {
++                // one trigger waits a moment for the other, both are the 4th
++                match (rise, self.waiting) {
++                    ([true, true], _) => fire = Some(2),
++                    ([true, false], Some((1, _))) | ([false, true], Some((0, _))) => fire = Some(2),
++                    ([true, false], _) => self.waiting = Some((0, BOTH)),
++                    ([false, true], _) => self.waiting = Some((1, BOTH)),
++                    _ => {}
++                }
++                if fire.is_some() {
++                    self.waiting = None;
++                } else if let Some((which, left)) = self.waiting {
++                    if left <= 1 {
++                        self.waiting = None;
++                        fire = Some(which);
++                    } else if !rise.iter().any(|&r| r) {
++                        self.waiting = Some((which, left - 1));
++                    }
++                }
++            }
++            TouchScheme::Combo => {
++                if rise[1] {
++                    fire = Some(0);
++                }
++                if held[0] {
++                    if let Some(i) = face_rise.iter().position(|&r| r) {
++                        fire = Some(i);
++                    }
++                }
++            }
++        }
++        if let Some(card) = fire {
++            if let Some(at) = self.touch.cards.get(card).copied().flatten() {
++                self.tap = Some((at, TAP));
++            }
++        }
++        match self.tap {
++            Some((at, left)) => {
++                self.tap = (left > 1).then_some((at, left - 1));
++                Some(at)
++            }
++            None => None,
++        }
++    }
++
++    /// whether the face buttons pick a card now rather than going to the
++    /// game: L2 held in the scheme where it does that.
++    fn picking(&self) -> bool {
++        self.touch.enabled && self.touch.scheme == TouchScheme::Combo && self.touch_held()[0]
++    }
++
+     /// what the controllers hold down, over what the keyboard does.
+-    pub fn apply(&self, mut state: InputState) -> InputState {
+-        let Some(gilrs) = &self.gilrs else { return state };
+-        // DBZ edition: held, a card's control touches its character's card
+-        // on the bottom screen, unless the mouse already touches it
++    pub fn apply(&mut self, mut state: InputState) -> InputState {
++        if self.gilrs.is_none() {
++            return state;
++        }
++        let tap = if self.touch.enabled { self.cards() } else { None };
+         if state.touch.is_none() {
+-            let held = self.touch_held();
+-            if held[0] {
+-                state.touch = Some(self.touch.second_at);
+-            } else if held[1] {
+-                state.touch = Some(self.touch.third_at);
+-            }
++            state.touch = tap;
+         }
++        let picking = self.picking();
++        let Some(gilrs) = &self.gilrs else { return state };
+         for (_, pad) in gilrs.gamepads() {
+             for (button, bound) in self.buttons.map() {
+-                // a button that touches a card does only that
+-                if pad.is_pressed(bound) && !self.touches(&pad, bound) {
++                // a button that touches a card does only that, and with L2
++                // held the face buttons pick a card
++                let face = matches!(bound, Button::West | Button::North | Button::East | Button::South);
++                if pad.is_pressed(bound) && !self.touches(&pad, bound) && !(picking && face) {
+                     state.buttons.set(button, true);
+                 }
+             }
+diff --git a/crates/zakuro/src/lib.rs b/crates/zakuro/src/lib.rs
+index 5bf3d71..08ab646 100644
+--- a/crates/zakuro/src/lib.rs
++++ b/crates/zakuro/src/lib.rs
+@@ -940,7 +940,7 @@ impl App {
+         let x = self.cursor.0 - bottom.x;
+         let y = self.cursor.1 - bottom.y;
+         let inside = x >= 0.0 && y >= 0.0 && x < bottom.width && y < bottom.height;
+-        self.keyboard.touch((self.mouse_down && inside).then(|| {
++        let point = (self.mouse_down && inside).then(|| {
+             let (u, v) = (x / bottom.width, y / bottom.height);
+             let (u, v) = match self.orientation {
+                 Orientation::North => (u, v),
+@@ -949,7 +949,20 @@ impl App {
+                 Orientation::West => (1.0 - v, u),
+             };
+             (((u * 320.0) as u16).min(319), ((v * 240.0) as u16).min(239))
+-        }));
++        });
++        // Extreme Fighters: a click setting where a character's card is
++        // goes to that, not to the game
++        if let (Some(card), Some(at)) = (self.menus.calibrating, point) {
++            self.menus.calibrating = None;
++            if let Some(slot) = self.settings.touch.cards.get_mut(card) {
++                *slot = Some(at);
++            }
++            self.apply_settings();
++            self.menus.toast = Some((format!("{} {} ({}, {})", tr::t("Card set:"), card + 2, at.0, at.1), Instant::now()));
++            self.keyboard.touch(None);
++            return;
++        }
++        self.keyboard.touch(point);
+     }
+ 
+     /// tilts the console while the right button is held, toward where the
+@@ -1348,6 +1361,17 @@ impl App {
+             }
+             Action::Quit => event_loop.exit(),
+             Action::CheckUpdates => self.check_updates(),
++            Action::ImportSave => self.import_save(),
++            Action::SavesFolder => {
++                if let Some(dir) = self.data_dir.clone() {
++                    let folder = match self.program_id() {
++                        Some(id) => dir.join("savedata").join(format!("{id:016X}")),
++                        None => dir.join("savedata"),
++                    };
++                    let _ = std::fs::create_dir_all(&folder);
++                    show_folder(&folder);
++                }
++            }
+             Action::Update => match online::start_updater() {
+                 Ok(()) => event_loop.exit(),
+                 Err(error) => self.menus.message = Some(format!("{}: {error}", tr::t("Could not start the update"))),
+@@ -1584,6 +1608,49 @@ impl App {
+         }
+     }
+ 
++    /// Extreme Fighters: replaces the running game's save with one the player
++    /// picks, a folder of its files, after copying the current one aside, and
++    /// starts the game again on it.
++    fn import_save(&mut self) {
++        let (Some(dir), Some(id)) = (self.data_dir.clone(), self.program_id()) else {
++            self.menus.message = Some(tr::t("Start the game first, then import the save.").to_owned());
++            return;
++        };
++        let Some(picked) = rfd::FileDialog::new().set_title(tr::t("Choose the folder of the save to import")).pick_folder() else { return };
++        // a Citra save keeps its files in data/00000001 under the title, a
++        // Checkpoint or JKSM backup in the folder itself
++        let from = if picked.join("00000001").is_dir() { picked.join("00000001") } else { picked };
++        let has_files = std::fs::read_dir(&from).map(|entries| entries.flatten().next().is_some()).unwrap_or(false);
++        if !has_files {
++            self.menus.message = Some(tr::t("That folder has no save files.").to_owned());
++            return;
++        }
++        let saves = dir.join("savedata");
++        let target = saves.join(format!("{id:016X}"));
++        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
++        let backup = saves.join(format!("{id:016X}_copia_{stamp}"));
++        let result = (|| -> std::io::Result<()> {
++            if target.is_dir() {
++                copy_dir(&target, &backup)?;
++                std::fs::remove_dir_all(&target)?;
++            }
++            copy_dir(&from, &target)
++        })();
++        match result {
++            Ok(()) => {
++                log::info!("imported the save from {} into {}", from.display(), target.display());
++                let note = if backup.is_dir() { format!("{}\n{}", tr::t("Save imported. Your previous save was copied to:"), backup.display()) } else { tr::t("Save imported.").to_owned() };
++                self.menus.message = Some(note);
++                if let Some(path) = self.game.as_ref().map(|game| game.path.clone()) {
++                    if let Err(error) = self.play(&path) {
++                        self.menus.message = Some(error);
++                    }
++                }
++            }
++            Err(error) => self.menus.message = Some(format!("{} {error}", tr::t("The save could not be imported:"))),
++        }
++    }
++
+     /// Extreme Fighters: asks GitHub for a newer version, away from the
+     /// interface.
+     fn check_updates(&mut self) {
+@@ -1925,6 +1992,7 @@ fn shown_right(system: &mut System) -> Option<(zakuro_core::Screen, Option<GpuSc
+ /// keeps the renderer kind referenced even when a backend feature is off.
+ const _: RendererKind = RendererKind::Software;
+ 
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+diff --git a/crates/zakuro/src/menus.rs b/crates/zakuro/src/menus.rs
+index a353d5f..4588630 100644
+--- a/crates/zakuro/src/menus.rs
++++ b/crates/zakuro/src/menus.rs
+@@ -44,6 +44,10 @@ pub enum Action {
+     /// Extreme Fighters: ask for a newer version, and install it.
+     CheckUpdates,
+     Update,
++    /// Extreme Fighters: copy a save into the running game's, and show
++    /// where the saves are.
++    ImportSave,
++    SavesFolder,
+     LeaveRoom,
+     /// take part in the Download Play offer at this place in the list, or
+     /// leave the one taken part in.
+@@ -92,6 +96,9 @@ pub struct Menus {
+     pub rebinding_touch: Option<usize>,
+     /// DBZ edition: whether each card's control is held now, to show it.
+     pub touch_held: [bool; 2],
++    /// Extreme Fighters: the card whose place the next click on the bottom
++    /// screen sets, 0 for the 2nd character's.
++    pub calibrating: Option<usize>,
+     /// Extreme Fighters: the public rooms of the room server, the list
+     /// being fetched, and why the last one failed.
+     lobby_rooms: Vec<crate::lobby::LobbyRoom>,
+@@ -862,11 +869,15 @@ impl Menus {
+                 }
+                 section(ui, t("Combat controls"));
+                 ui.checkbox(&mut settings.touch.enabled, t("Change character / striker with the controller"));
++                ui.add_enabled_ui(settings.touch.enabled, |ui| {
++                    ui.radio_value(&mut settings.touch.scheme, crate::settings::TouchScheme::Triggers, t("Triggers: L2 = 2nd card, R2 = 3rd card, L2 + R2 together = 4th card"));
++                    ui.radio_value(&mut settings.touch.scheme, crate::settings::TouchScheme::Combo, t("L2 + button: R2 = 2nd card; hold L2 and press the left, top, right or bottom face button = 2nd, 3rd, 4th or 5th card"));
++                });
+                 ui.add_enabled_ui(settings.touch.enabled, |ui| {
+                     egui::Grid::new("combat").num_columns(3).spacing([12.0, 6.0]).show(ui, |ui| {
+                         let rows = [
+-                            (t("2nd character"), settings.touch.second_raw.as_ref().map(|raw| raw.label.clone()), settings.touch.second),
+-                            (t("3rd character"), settings.touch.third_raw.as_ref().map(|raw| raw.label.clone()), settings.touch.third),
++                            (t("Left trigger (L2)"), settings.touch.second_raw.as_ref().map(|raw| raw.label.clone()), settings.touch.second),
++                            (t("Right trigger (R2)"), settings.touch.third_raw.as_ref().map(|raw| raw.label.clone()), settings.touch.third),
+                         ];
+                         for (i, (label, learned, button)) in rows.into_iter().enumerate() {
+                             ui.label(label);
+@@ -889,10 +900,32 @@ impl Menus {
+                     });
+                     ui.ctx().request_repaint();
+                 });
+-                ui.label(RichText::new(t("Holding the button touches that character's card on the bottom screen, to change to them or call them in as a striker.")).weak());
++                ui.label(RichText::new(t("Each press taps that character's card on the bottom screen, to change to them or call them in as a striker.")).weak());
++                // where each card is, set by clicking it
++                ui.add_space(4.0);
++                ui.label(RichText::new(t("Where the cards are")).strong());
++                egui::Grid::new("cards").num_columns(3).spacing([12.0, 4.0]).show(ui, |ui| {
++                    for card in 0..4 {
++                        ui.label(format!("{} {}", t("Card"), card + 2));
++                        match settings.touch.cards[card] {
++                            Some((x, y)) => drop(ui.label(RichText::new(format!("({x}, {y})")).monospace())),
++                            None => drop(ui.label(RichText::new(t("not set")).color(ORANGE_SOFT))),
++                        }
++                        let text = if self.calibrating == Some(card) { t("click it…") } else { t("Set") };
++                        if ui.button(text).clicked() {
++                            self.calibrating = Some(card);
++                            self.settings_open = false;
++                            self.menu_open = false;
++                            self.toast = Some((format!("{} {}", t("Click the card on the bottom screen:"), card + 2), std::time::Instant::now()));
++                        }
++                        ui.end_row();
++                    }
++                });
++                ui.label(RichText::new(t("With more than 3 characters the cards move: start a fight with that team, press Set and click each card on the bottom screen.")).weak());
+                 if ui.button(t("Default combat controls")).clicked() {
+                     settings.touch = TouchButtons::default();
+                     self.rebinding_touch = None;
++                    self.calibrating = None;
+                 }
+ 
+                 section(ui, t("Graphics"));
+@@ -942,6 +975,17 @@ impl Menus {
+                 code(ui, &mut settings.recompiled);
+                 ui.label(RichText::new(t("It changes with the next game started, or Reset.")).weak());
+ 
++                section(ui, t("Saves"));
++                ui.label(RichText::new(t("To have everything unlocked, import a 100% save of the European version: a backup made on a 3DS with Checkpoint or JKSM, or a Citra/Azahar save. Your current save is copied first, just in case.")).weak());
++                ui.horizontal(|ui| {
++                    if ui.button(t("Import a save…")).clicked() {
++                        actions.push(Action::ImportSave);
++                    }
++                    if ui.button(t("Open the saves folder")).clicked() {
++                        actions.push(Action::SavesFolder);
++                    }
++                });
++
+                 section(ui, t("Sound"));
+                 ui.add(egui::Slider::new(&mut settings.volume, 0.0..=1.0).text(t("Volume")).show_value(false));
+                 ui.checkbox(&mut settings.mute, t("Mute"));
+diff --git a/crates/zakuro/src/settings.rs b/crates/zakuro/src/settings.rs
+index 18e2a7b..a605529 100644
+--- a/crates/zakuro/src/settings.rs
++++ b/crates/zakuro/src/settings.rs
+@@ -596,15 +596,32 @@ pub struct Settings {
+ #[serde(default)]
+ pub struct TouchButtons {
+     pub enabled: bool,
++    /// how the two controls pick a card.
++    #[serde(deserialize_with = "or_default")]
++    pub scheme: TouchScheme,
++    /// the left control (L2) and the right one (R2).
+     pub second: Button,
+     pub third: Button,
+-    /// where each card is touched, in the bottom screen's 320x240 pixels.
+-    pub second_at: (u16, u16),
+-    pub third_at: (u16, u16),
+     /// the controls learned from the controller itself, which go over the
+     /// buttons above: some controllers report both triggers alike.
+     pub second_raw: Option<RawControl>,
+     pub third_raw: Option<RawControl>,
++    /// where the cards of the 2nd to the 5th character are touched, in the
++    /// bottom screen's 320x240 pixels, none for one not set yet. a team
++    /// with more cards has them elsewhere, the player sets them by clicking.
++    pub cards: [Option<(u16, u16)>; 4],
++}
++
++/// Extreme Fighters: how the two triggers pick a card.
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
++#[serde(rename_all = "snake_case")]
++pub enum TouchScheme {
++    /// L2 the 2nd card, R2 the 3rd, both at once the 4th.
++    #[default]
++    Triggers,
++    /// R2 the 2nd card; L2 held, the face buttons left, up, right and
++    /// down the 2nd, 3rd, 4th and 5th.
++    Combo,
+ }
+ 
+ /// DBZ edition: a control as the controller itself reports it, its raw
+@@ -622,12 +639,12 @@ impl Default for TouchButtons {
+     fn default() -> Self {
+         TouchButtons {
+             enabled: true,
++            scheme: TouchScheme::Triggers,
+             second: Button::LeftTrigger2,
+             third: Button::RightTrigger2,
+-            second_at: (161, 109),
+-            third_at: (266, 109),
+             second_raw: None,
+             third_raw: None,
++            cards: [Some((161, 109)), Some((266, 109)), None, None],
+         }
+     }
+ }
+diff --git a/crates/zakuro/src/tr.rs b/crates/zakuro/src/tr.rs
+index 1aac6ec..df53ad4 100644
+--- a/crates/zakuro/src/tr.rs
++++ b/crates/zakuro/src/tr.rs
+@@ -136,6 +136,29 @@ const TABLE: &[(&str, [&str; 6])] = &[
+     ("The router could not be opened by itself. Others can only come in if you open this port to this PC:", ["El router no se pudo abrir solo. Los demás solo podrán entrar si abres en tu router este puerto hacia este PC:", "Le routeur n'a pas pu s'ouvrir seul. Les autres ne pourront entrer que si vous ouvrez ce port vers ce PC :", "Der Router konnte nicht automatisch geöffnet werden. Andere können nur beitreten, wenn du diesen Port zu diesem PC öffnest:", "Il router non si è potuto aprire da solo. Gli altri potranno entrare solo se apri questa porta verso questo PC:", "ルーターを自動で開放できませんでした。このPCへ次のポートを開放すると参加できます:", "无法自动开放路由器。只有将此端口转发到本机，其他人才能加入："]),
+     ("Your internet connection can't receive players (your provider uses CG-NAT). Join someone else's room, or use a public room server.", ["Tu conexión no puede recibir jugadores (tu compañía usa CG-NAT). Únete a la sala de otro jugador o usa un servidor de salas público.", "Votre connexion ne peut pas recevoir de joueurs (votre fournisseur utilise le CG-NAT). Rejoignez le salon d'un autre joueur ou un serveur public.", "Deine Verbindung kann keine Spieler empfangen (dein Anbieter nutzt CG-NAT). Tritt dem Raum eines anderen bei oder nutze einen öffentlichen Raumserver.", "La tua connessione non può ricevere giocatori (il tuo provider usa CG-NAT). Unisciti alla stanza di un altro o usa un server pubblico.", "この回線ではプレイヤーを受け入れられません（プロバイダーがCG-NATを使用）。他の人のルームに参加するか、公開ルームサーバーを使ってください。", "你的网络无法接收其他玩家（运营商使用 CG-NAT）。请加入他人的房间或使用公共房间服务器。"]),
+     ("No internet connection could be found.", ["No se encontró conexión a internet.", "Aucune connexion internet trouvée.", "Keine Internetverbindung gefunden.", "Nessuna connessione a internet trovata.", "インターネット接続が見つかりません。", "未找到互联网连接。"]),
++    ("Triggers: L2 = 2nd card, R2 = 3rd card, L2 + R2 together = 4th card", ["Gatillos: L2 = 2.ª carta, R2 = 3.ª carta, L2 + R2 a la vez = 4.ª carta", "Gâchettes : L2 = 2e carte, R2 = 3e carte, L2 + R2 ensemble = 4e carte", "Abzüge: L2 = 2. Karte, R2 = 3. Karte, L2 + R2 zusammen = 4. Karte", "Grilletti: L2 = 2ª carta, R2 = 3ª carta, L2 + R2 insieme = 4ª carta", "トリガー: L2 = 2枚目、R2 = 3枚目、L2 + R2 同時 = 4枚目", "扳机：L2 = 第2张卡，R2 = 第3张卡，L2 + R2 同时 = 第4张卡"]),
++    ("L2 + button: R2 = 2nd card; hold L2 and press the left, top, right or bottom face button = 2nd, 3rd, 4th or 5th card", ["L2 + botón: R2 = 2.ª carta; mantén L2 y pulsa el botón de la izquierda, arriba, derecha o abajo = 2.ª, 3.ª, 4.ª o 5.ª carta", "L2 + bouton : R2 = 2e carte ; maintenez L2 et appuyez sur le bouton de gauche, du haut, de droite ou du bas = 2e, 3e, 4e ou 5e carte", "L2 + Taste: R2 = 2. Karte; L2 halten und linke, obere, rechte oder untere Taste = 2., 3., 4. oder 5. Karte", "L2 + pulsante: R2 = 2ª carta; tieni L2 e premi il pulsante a sinistra, in alto, a destra o in basso = 2ª, 3ª, 4ª o 5ª carta", "L2 + ボタン: R2 = 2枚目。L2 を押しながら左・上・右・下のボタン = 2・3・4・5枚目", "L2 + 按键：R2 = 第2张卡；按住 L2 再按左、上、右、下按键 = 第2、3、4、5张卡"]),
++    ("Each press taps that character's card on the bottom screen, to change to them or call them in as a striker.", ["Cada pulsación toca la carta de ese personaje en la pantalla inferior: para cambiar a él o llamarlo como striker.", "Chaque pression touche la carte de ce personnage sur l'écran du bas : pour changer ou l'appeler en striker.", "Jeder Druck tippt die Karte dieses Charakters auf dem unteren Bildschirm an: zum Wechseln oder als Striker.", "Ogni pressione tocca la carta di quel personaggio sullo schermo inferiore: per cambiare o chiamarlo come striker.", "押すたびに下画面のキャラカードをタッチし、交代またはストライカーとして呼び出します。", "每次按下都会点击下屏对应角色卡，用于切换角色或呼叫援护。"]),
++    ("Where the cards are", ["Dónde están las cartas", "Position des cartes", "Wo die Karten sind", "Dove sono le carte", "カードの位置", "卡片位置"]),
++    ("Card", ["Carta", "Carte", "Karte", "Carta", "カード", "卡片"]),
++    ("not set", ["sin ajustar", "non réglée", "nicht gesetzt", "non impostata", "未設定", "未设置"]),
++    ("Set", ["Ajustar", "Régler", "Festlegen", "Imposta", "設定", "设置"]),
++    ("click it…", ["haz clic…", "cliquez…", "anklicken…", "fai clic…", "クリック…", "点击…"]),
++    ("Click the card on the bottom screen:", ["Haz clic en la pantalla inferior sobre la carta", "Cliquez sur l'écran du bas sur la carte", "Klicke auf dem unteren Bildschirm auf Karte", "Fai clic sullo schermo inferiore sulla carta", "下画面でクリックしてください: カード", "请在下屏点击卡片"]),
++    ("Card set:", ["Carta ajustada:", "Carte réglée :", "Karte gesetzt:", "Carta impostata:", "カード設定:", "卡片已设置："]),
++    ("With more than 3 characters the cards move: start a fight with that team, press Set and click each card on the bottom screen.", ["Con más de 3 personajes las cartas cambian de sitio: empieza un combate con ese equipo, pulsa Ajustar y haz clic en cada carta de la pantalla inferior.", "Avec plus de 3 personnages les cartes bougent : lancez un combat avec cette équipe, appuyez sur Régler et cliquez sur chaque carte de l'écran du bas.", "Mit mehr als 3 Charakteren verschieben sich die Karten: Starte einen Kampf mit diesem Team, drücke Festlegen und klicke jede Karte auf dem unteren Bildschirm an.", "Con più di 3 personaggi le carte si spostano: inizia un combattimento con quella squadra, premi Imposta e fai clic su ogni carta dello schermo inferiore.", "4人以上だとカードの位置が変わります。そのチームでバトルを始め、「設定」を押して下画面の各カードをクリックしてください。", "超过3名角色时卡片位置会变化：用该队伍开始战斗，点击“设置”后在下屏点击各张卡片。"]),
++    ("Left trigger (L2)", ["Gatillo izquierdo (L2)", "Gâchette gauche (L2)", "Linker Abzug (L2)", "Grilletto sinistro (L2)", "左トリガー (L2)", "左扳机 (L2)"]),
++    ("Right trigger (R2)", ["Gatillo derecho (R2)", "Gâchette droite (R2)", "Rechter Abzug (R2)", "Grilletto destro (R2)", "右トリガー (R2)", "右扳机 (R2)"]),
++    ("Saves", ["Partidas guardadas", "Sauvegardes", "Spielstände", "Salvataggi", "セーブデータ", "存档"]),
++    ("To have everything unlocked, import a 100% save of the European version: a backup made on a 3DS with Checkpoint or JKSM, or a Citra/Azahar save. Your current save is copied first, just in case.", ["Para tener todo desbloqueado, importa una partida al 100 % de la versión europea: una copia hecha en una 3DS con Checkpoint o JKSM, o una partida de Citra/Azahar. Antes se hace una copia de tu partida actual, por si acaso.", "Pour tout débloquer, importez une sauvegarde à 100 % de la version européenne : une copie faite sur 3DS avec Checkpoint ou JKSM, ou une sauvegarde Citra/Azahar. Votre sauvegarde actuelle est copiée avant, par sécurité.", "Um alles freizuschalten, importiere einen 100-%-Spielstand der europäischen Version: eine Sicherung von einem 3DS mit Checkpoint oder JKSM oder einen Citra/Azahar-Spielstand. Dein aktueller Spielstand wird vorher gesichert.", "Per sbloccare tutto, importa un salvataggio al 100% della versione europea: una copia fatta su 3DS con Checkpoint o JKSM, o un salvataggio di Citra/Azahar. Prima viene copiato il tuo salvataggio attuale, per sicurezza.", "すべて解放するには、欧州版の100%セーブをインポートしてください（3DSのCheckpoint/JKSMで作ったバックアップ、またはCitra/Azaharのセーブ）。念のため現在のセーブは先にコピーされます。", "要解锁全部内容，请导入欧版的 100% 存档：在 3DS 上用 Checkpoint 或 JKSM 备份的存档，或 Citra/Azahar 存档。导入前会先备份你当前的存档。"]),
++    ("Import a save…", ["Importar partida guardada…", "Importer une sauvegarde…", "Spielstand importieren…", "Importa salvataggio…", "セーブをインポート…", "导入存档…"]),
++    ("Open the saves folder", ["Abrir carpeta de partidas", "Ouvrir le dossier des sauvegardes", "Spielstand-Ordner öffnen", "Apri la cartella dei salvataggi", "セーブフォルダーを開く", "打开存档文件夹"]),
++    ("Start the game first, then import the save.", ["Primero abre el juego y luego importa la partida.", "Lancez d'abord le jeu, puis importez la sauvegarde.", "Starte zuerst das Spiel und importiere dann den Spielstand.", "Avvia prima il gioco, poi importa il salvataggio.", "先にゲームを起動してからセーブをインポートしてください。", "请先启动游戏，再导入存档。"]),
++    ("Choose the folder of the save to import", ["Elige la carpeta de la partida a importar", "Choisissez le dossier de la sauvegarde à importer", "Wähle den Ordner des Spielstands", "Scegli la cartella del salvataggio da importare", "インポートするセーブのフォルダーを選択", "选择要导入的存档文件夹"]),
++    ("That folder has no save files.", ["Esa carpeta no tiene archivos de partida.", "Ce dossier ne contient pas de sauvegarde.", "Dieser Ordner enthält keinen Spielstand.", "Quella cartella non contiene salvataggi.", "そのフォルダーにセーブファイルがありません。", "该文件夹中没有存档文件。"]),
++    ("Save imported. Your previous save was copied to:", ["Partida importada. Tu partida anterior se ha copiado en:", "Sauvegarde importée. L'ancienne a été copiée dans :", "Spielstand importiert. Der vorherige wurde kopiert nach:", "Salvataggio importato. Quello precedente è stato copiato in:", "インポートしました。以前のセーブのコピー先:", "存档已导入。之前的存档已复制到："]),
++    ("Save imported.", ["Partida importada.", "Sauvegarde importée.", "Spielstand importiert.", "Salvataggio importato.", "インポートしました。", "存档已导入。"]),
++    ("The save could not be imported:", ["No se pudo importar la partida:", "Impossible d'importer la sauvegarde :", "Der Spielstand konnte nicht importiert werden:", "Impossibile importare il salvataggio:", "セーブをインポートできませんでした:", "无法导入存档："]),
+     ("Nickname", ["Apodo", "Pseudo", "Spitzname", "Soprannome", "ニックネーム", "昵称"]),
+     ("In the room", ["En la sala", "Dans le salon", "Im Raum", "Nella stanza", "ルーム:", "所在房间"]),
+     ("playing", ["jugando a", "joue à", "spielt", "gioca a", "プレイ中:", "正在玩"]),
 -- 
 2.43.0
 

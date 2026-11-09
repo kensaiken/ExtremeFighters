@@ -1,4 +1,4 @@
-EXTREME FIGHTERS - SERVIDOR DE SALAS ONLINE (v0.3.0)
+EXTREME FIGHTERS - SERVIDOR DE SALAS ONLINE (v0.4.0, opcional)
 ====================================================
 
 Que es

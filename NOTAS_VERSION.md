@@ -1,18 +1,19 @@
-# Extreme Fighters v0.3.0
+# Extreme Fighters v0.5.0
 
 > 🧪 Early development release. If you find a bug, open an issue and attach the `logs` folder.
 
-## ✨ New
-- 🖥️ **Full top screen**: the main screen now fills the whole height of your monitor, with the bottom screen as a **small window over a corner**. Adjust its size and side in *Options → Graphics*; **F10** shows or hides it. It's the new default.
-- 🎨 **Graphics quality presets**: Performance (2×), Balanced (3×), High (4×), Ultra (6×). The installer **picks one automatically for your graphics card**.
-- 🌐 **Public rooms**: in *Online*, type the address of an Extreme Fighters room server and join a room with one click.
-- 🖧 **Room server** (`ExtremeFighters_Servidor.zip`, Windows and Linux): keeps several rooms open and publishes their list. **Only the server needs open ports**, not the players.
+## 🐛 Fixes
+- **L2 / R2 sometimes failed to switch character**: each press now does a short **tap** on the card, like a finger, however long the trigger is held.
 
-## Downloads
-- **`ExtremeFighters_Instalador.zip`**: the game installer (extract it and run `Instalar.exe`).
-- **`ExtremeFighters_Servidor.zip`**: optional, only if you want to host online rooms. See `LEEME_SERVIDOR.txt` inside.
+## ✨ New
+- 🎮 **Two control schemes** (*Options → Combat controls*):
+  - **Triggers**: L2 = 2nd card · R2 = 3rd card · L2 + R2 together = 4th card.
+  - **L2 + button** (big teams): R2 = 2nd card; hold L2 and press the left / top / right / bottom face button = 2nd / 3rd / 4th / 5th card.
+- 🎯 **Set where each card is** (up to the 5th): press *Set* and click the card on the bottom screen. Useful when teams with more characters move the cards.
+- 🔓 **Import a save** (*Options → Saves*): load a 100% save (Checkpoint/JKSM backup or Citra/Azahar save) to have everything unlocked. Your current save is backed up first.
 
 ## How to update
-Run the new `Instalar.exe`, pick your `.3ds` and the **same install folder**. Only the engine and settings are updated: saves and the recompiled game are kept (no recompiling).
+- **From v0.4.0**: open the game, press **Esc → Update to v0.5.0** (or use the **UPDATE** button in the installer).
+- **From v0.3.0 or older**: run the new `Instalar.exe`, pick your `.3ds` and the **same install folder**.
 
 > The game is not included. Fan project, not affiliated with Bandai Namco, Bird Studio/Shueisha, Toei Animation or Nintendo.

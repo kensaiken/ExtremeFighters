@@ -6,7 +6,7 @@
 
 <p align="center">🇬🇧 <a href="README.md">Read in English</a></p>
 
-<p align="center"><b>Versión 0.3.0</b> · en desarrollo · <a href="CHANGELOG.md">registro de cambios</a></p>
+<p align="center"><b>Versión 0.5.0</b> · en desarrollo · <a href="CHANGELOG.md">registro de cambios</a></p>
 
 <p align="center">
   <b>Port nativo para PC (Windows x64) de <i>Dragon Ball Z: Extreme Butoden</i> de 3DS</b><br>
@@ -31,10 +31,12 @@ Todo se hace con un instalador gráfico: solo le das el `.3ds`.
 
 ### 🎮 Juego y controles
 - **Código nativo recompilado**: el juego corre como código x64 nativo en vez de interpretado, así va con más fluidez y gasta menos CPU.
-- **Cambiar de personaje / llamar al striker con los gatillos**:
-  - **L2** = carta del 2.º personaje · **R2** = carta del 3.º personaje.
-  - Al pulsarlo se toca su carta en la pantalla táctil, igual que con el dedo en la 3DS. Ya no hace falta el ratón.
-  - Se puede reasignar a otros botones o desactivar en *Opciones → Controles de combate*.
+- **Cambiar de personaje / llamar al striker con los gatillos**: cada pulsación **toca** la carta del personaje en la pantalla táctil, como el dedo en la 3DS. Dos esquemas en *Opciones → Controles de combate*:
+  - **Gatillos** (por defecto): **L2** = 2.ª carta · **R2** = 3.ª carta · **L2 + R2 a la vez** = 4.ª carta.
+  - **L2 + botón** (equipos grandes): **R2** = 2.ª carta; **mantén L2** y pulsa el botón de **la izquierda / arriba / derecha / abajo** = 2.ª / 3.ª / 4.ª / 5.ª carta.
+  - Con más cartas cambian de sitio: pulsa **Ajustar** junto a cada carta y **haz clic en ella** en la pantalla inferior.
+  - Los controles se aprenden de tu propio mando (funciona con 8BitDo y otros), con indicador en directo.
+- **Desbloquear todo**: *Opciones → Partidas guardadas → Importar partida guardada…* carga una partida al 100 % (copia de Checkpoint/JKSM o partida de Citra/Azahar). Antes se hace copia de tu partida actual.
 - **Compatible con mandos** de Xbox, PlayStation y genéricos: el stick izquierdo es el Circle Pad y el botón Home abre el menú.
 - **Estados de guardado** (save states) en 9 ranuras, además de las partidas normales del juego.
 
@@ -54,7 +56,14 @@ Todo se hace con un instalador gráfico: solo le das el `.3ds`.
 - Menú simplificado: Continuar, Reiniciar, Pantalla completa, Guardar/Cargar estado, **Online**, Opciones, Trucos y Salir.
 - Fuera lo que no pinta nada en un port: biblioteca de juegos, cámara, informes de errores…
 - **Online**: salas para jugar por internet usando el combate inalámbrico local del propio juego (sin rollback).
-- **Lista de salas públicas**: escribes la dirección de un servidor de salas de Extreme Fighters y te unes a una sala con un clic. Solo el servidor necesita abrir puertos, no los jugadores.
+- **Crear sala online**: el juego **abre tu router solo (UPnP)** y te da un **código de sala** tipo `EF-7K2M4-9QX41`. Tus amigos lo escriben y entran: conexión directa, con el menor retraso posible.
+- Si tu conexión no puede recibir jugadores (**CG-NAT**), el juego te avisa y te propone unirte a la sala de otro o a un servidor público.
+- **Lista de salas públicas** con el **ping** de cada sala, las más cercanas primero. Solo el servidor de salas necesita abrir puertos.
+
+### 🔄 Actualizaciones automáticas
+- El **instalador** consulta GitHub al abrirse y muestra el botón **ACTUALIZAR A vX.X.X** cuando hay versión nueva.
+- **En el juego** (menú de pausa): **Buscar actualizaciones** y **Actualizar a vX.X.X**. También lo comprueba solo al arrancar y avisa.
+- Al actualizar se descarga la versión nueva, se conservan partidas, configuración y el juego recompilado (sin recompilar) y se vuelve a abrir el juego.
 
 ### 📦 Instalador todo en uno
 - **Solo pide el `.3ds`**: el recompilador viene ya compilado. No hace falta Rust, Visual Studio ni instalar compiladores a mano.
@@ -95,8 +104,10 @@ logs\        registros de la instalación
 Jugar.exe    abre el juego
 ```
 
-## 🌐 Servidor de salas online
-En el Release también va **`ExtremeFighters_Servidor.zip`**: un programa pequeño (Windows y Linux) que mantiene varias salas abiertas y publica su lista.
+## 🌐 Jugar online
+**Con amigos (recomendado):** *Esc → Online → Crear sala online* y comparte el **código de sala**. Tus amigos van a *Online → Código de sala o dirección*, lo escriben y pulsan **Unirse**. No hace falta descargar nada más.
+
+**Servidor de salas (opcional):** para comunidades que quieran salas abiertas las 24 horas, en el Release también va **`ExtremeFighters_Servidor.zip`**: un programa pequeño (Windows y Linux) que mantiene varias salas abiertas y publica su lista.
 1. Arráncalo en un PC que esté encendido o en un servidor (VPS): `Iniciar_servidor.bat` en Windows, `./ef-servidor-linux` en Linux.
 2. Abre los puertos TCP **24872-24878** en el router o el cortafuegos de ese equipo.
 3. Compruébalo en el navegador: `http://TU-IP:24872/`.

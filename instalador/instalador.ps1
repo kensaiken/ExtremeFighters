@@ -4,8 +4,12 @@
 # portable), recompila el juego a codigo nativo y crea los accesos directos.
 # Todo se guarda en DBZ_Datos, junto al instalador.
 
+# -AutoUpdate: actualiza solo la instalacion de -Destino (lo usa actualizar.ps1)
+# -Jugar: abre el juego al terminar
+param([switch]$AutoUpdate, [string]$Destino = '', [switch]$Jugar)
+
 $ErrorActionPreference = 'Stop'
-$AppVersion = '0.3.0'   # version de Extreme Fighters
+$AppVersion = '0.5.0'   # version de Extreme Fighters
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type -Namespace Native -Name Dpi -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetProcessDPIAware();'
@@ -16,7 +20,7 @@ Add-Type -Namespace Native -Name Dpi -MemberDefinition '[DllImport("user32.dll")
 # Zakuro edicion DBZ (v0.2.32 modificado: menu traducido y con estilo propio,
 # gatillos para las cartas de personaje, Online). Va en bin\zakuro.exe y usa
 # exactamente el 3dsrecomp df82e6e3 que va en bin\
-$ZakuroVersion = 'v0.2.32-dbz3'
+$ZakuroVersion = 'v0.2.32-dbz5'
 $ZigVersion    = '0.17.0'
 $ZigFile       = "zig-x86_64-windows-$ZigVersion.zip"
 $ZigSize       = 100268137
@@ -87,6 +91,7 @@ function Free-GB([string]$dir) {
 $dest = Join-Path $Here 'ExtremeFighters'
 try { if (Test-Path $DestFile) { $d = (Get-Content $DestFile -Raw).Trim(); if ($d -and (Test-Path ([IO.Path]::GetPathRoot($d)))) { $dest = $d } } } catch {}
 Set-InstDir $dest
+if ($Destino) { Set-InstDir $Destino }
 $GameName  = 'Extreme Fighters'
 
 # ---------------------------------------------------------------- idiomas
@@ -98,6 +103,7 @@ $Langs = @(
 $script:Strings = @'
 {
 "es": {
+ "upd_btn": "ACTUALIZAR A v{0}", "upd_ok": "v{0} · última versión", "upd_check": "v{0} · buscando actualizaciones…", "upd_auto": "Actualizando a la última versión…",
  "dest": "Carpeta de instalación (todo se guarda aquí)", "free": "Libre: {0} GB", "pickdest": "Elige dónde instalar el juego. Todo (juego, partidas, configuración y caché de gráficos) quedará dentro de esa carpeta.", "nospace": "No hay espacio suficiente en la carpeta elegida: hacen falta unos {0} GB.", "nowrite2": "No se puede escribir en esa carpeta. Elige otra.",
  "lang": "Idioma",
  "win": "Extreme Fighters - Instalador",
@@ -120,6 +126,7 @@ $script:Strings = @'
  "errrecomp": "La recompilación falló.", "fail": "Error: revisa el mensaje"
 },
 "en": {
+ "upd_btn": "UPDATE TO v{0}", "upd_ok": "v{0} · latest version", "upd_check": "v{0} · checking for updates…", "upd_auto": "Updating to the latest version…",
  "dest": "Install folder (everything is stored here)", "free": "Free: {0} GB", "pickdest": "Choose where to install the game. Everything (game, saves, settings and graphics cache) will stay inside that folder.", "nospace": "Not enough free space in the chosen folder: about {0} GB are needed.", "nowrite2": "That folder can't be written to. Choose another one.",
  "lang": "Language",
  "win": "Extreme Fighters - Installer",
@@ -142,6 +149,7 @@ $script:Strings = @'
  "errrecomp": "Recompilation failed.", "fail": "Error: see the message"
 },
 "fr": {
+ "upd_btn": "METTRE À JOUR v{0}", "upd_ok": "v{0} · dernière version", "upd_check": "v{0} · recherche de mises à jour…", "upd_auto": "Mise à jour vers la dernière version…",
  "dest": "Dossier d'installation (tout est enregistré ici)", "free": "Libre : {0} Go", "pickdest": "Choisissez où installer le jeu. Tout (jeu, sauvegardes, réglages et cache graphique) restera dans ce dossier.", "nospace": "Espace insuffisant dans le dossier choisi : il faut environ {0} Go.", "nowrite2": "Impossible d'écrire dans ce dossier. Choisissez-en un autre.",
  "lang": "Langue",
  "win": "Extreme Fighters - Installateur",
@@ -164,6 +172,7 @@ $script:Strings = @'
  "errrecomp": "La recompilation a échoué.", "fail": "Erreur : voir le message"
 },
 "de": {
+ "upd_btn": "AKTUALISIEREN v{0}", "upd_ok": "v{0} · neueste Version", "upd_check": "v{0} · suche nach Updates…", "upd_auto": "Aktualisierung auf die neueste Version…",
  "dest": "Installationsordner (alles wird hier gespeichert)", "free": "Frei: {0} GB", "pickdest": "Wähle, wo das Spiel installiert wird. Alles (Spiel, Spielstände, Einstellungen und Grafik-Cache) bleibt in diesem Ordner.", "nospace": "Nicht genug freier Speicher im gewählten Ordner: etwa {0} GB werden benötigt.", "nowrite2": "In diesen Ordner kann nicht geschrieben werden. Wähle einen anderen.",
  "lang": "Sprache",
  "win": "Extreme Fighters - Installation",
@@ -186,6 +195,7 @@ $script:Strings = @'
  "errrecomp": "Die Rekompilierung ist fehlgeschlagen.", "fail": "Fehler: siehe Meldung"
 },
 "it": {
+ "upd_btn": "AGGIORNA A v{0}", "upd_ok": "v{0} · ultima versione", "upd_check": "v{0} · ricerca aggiornamenti…", "upd_auto": "Aggiornamento all'ultima versione…",
  "dest": "Cartella di installazione (tutto viene salvato qui)", "free": "Libero: {0} GB", "pickdest": "Scegli dove installare il gioco. Tutto (gioco, salvataggi, impostazioni e cache grafica) resterà in quella cartella.", "nospace": "Spazio insufficiente nella cartella scelta: servono circa {0} GB.", "nowrite2": "Impossibile scrivere in quella cartella. Scegline un'altra.",
  "lang": "Lingua",
  "win": "Extreme Fighters - Installazione",
@@ -208,6 +218,7 @@ $script:Strings = @'
  "errrecomp": "La ricompilazione non è riuscita.", "fail": "Errore: vedi il messaggio"
 },
 "ja": {
+ "upd_btn": "v{0} に更新", "upd_ok": "v{0} · 最新版", "upd_check": "v{0} · アップデートを確認中…", "upd_auto": "最新バージョンに更新中…",
  "dest": "インストール先フォルダー（すべてここに保存）", "free": "空き: {0} GB", "pickdest": "ゲームのインストール先を選んでください。ゲーム・セーブ・設定・グラフィックキャッシュはすべてそのフォルダー内に保存されます。", "nospace": "選択したフォルダーの空き容量が足りません。約 {0} GB 必要です。", "nowrite2": "そのフォルダーには書き込めません。別のフォルダーを選んでください。",
  "lang": "言語",
  "win": "Extreme Fighters - インストーラー",
@@ -230,6 +241,7 @@ $script:Strings = @'
  "errrecomp": "リコンパイルに失敗しました。", "fail": "エラー: メッセージを確認してください"
 },
 "zh": {
+ "upd_btn": "更新到 v{0}", "upd_ok": "v{0} · 最新版本", "upd_check": "v{0} · 正在检查更新…", "upd_auto": "正在更新到最新版本…",
  "dest": "安装文件夹（所有数据都保存在这里）", "free": "可用：{0} GB", "pickdest": "选择游戏的安装位置。游戏、存档、设置和图形缓存都将保存在该文件夹中。", "nospace": "所选文件夹的可用空间不足：大约需要 {0} GB。", "nowrite2": "无法写入该文件夹。请选择其他文件夹。",
  "lang": "语言",
  "win": "Extreme Fighters - 安装程序",
@@ -483,6 +495,7 @@ function FolderIcon($g, [double]$x, [double]$y) {
 $Layout = @{
     Banner = @(0, 0, 1024, 333)
     Install = @(455, 340, 276, 100); Play = @(455, 452, 276, 74); Quit = @(455, 538, 276, 74)
+    Update = @(763, 486, 246, 34)
     File = @(21, 380, 350, 36); Folder = @(380, 380, 44, 36); Dest = @(21, 444, 350, 36); DestBtn = @(380, 444, 44, 36)
 }
 function RR([string]$n) { $a = $Layout[$n]; RF $a[0] $a[1] $a[2] $a[3] }
@@ -495,6 +508,7 @@ function Can([string]$n) {
         'Dest'    { return -not $script:Running }
         'DestBtn' { return -not $script:Running }
         'Quit'    { return $true }
+        'Update'  { return [bool]((-not $script:Running) -and $script:NewVersion) }
     }
     return $false
 }
@@ -636,7 +650,23 @@ function Draw-All($g) {
     $br = (Grad $fade2 (C 20 18 18 255) (C 20 18 18 0) 90)
     $g.FillRectangle($br, $fade2); $br.Dispose()
     $fi = F $script:FamText 16
-    $g.DrawString((L 'info'), $fi, $white, (RF 763 382 246 140)); $fi.Dispose()
+    $g.DrawString((L 'info'), $fi, $white, (RF 763 382 246 100)); $fi.Dispose()
+    # actualizaciones: boton cuando hay una version nueva en GitHub
+    if ($script:NewVersion) {
+        $ur = RR 'Update'; $up = RoundPath $ur 7
+        $c1 = C 255 178 52; $c2 = C 232 92 0
+        if ($script:Hover -eq 'Update' -and (Can 'Update')) { $c1 = C 255 205 95; $c2 = C 245 120 15 }
+        $ub = (Grad $ur $c1 $c2 90); $g.FillPath($ub, $up); $ub.Dispose()
+        $pen = New-Object System.Drawing.Pen((C 255 230 140), (P 1.5)); $g.DrawPath($pen, $up); $pen.Dispose(); $up.Dispose()
+        $wb = New-Object System.Drawing.SolidBrush((C 255 255 255))
+        OutlinedText $g ((L 'upd_btn') -f $script:NewVersion) $script:FamBold 17 $ur $wb 2.5
+        $wb.Dispose()
+    } else {
+        $key = 'upd_check'; if ($script:UpdChecked) { $key = 'upd_ok' }
+        $fu = F $script:FamText 13 'Italic'
+        $gb = New-Object System.Drawing.SolidBrush((C 165 165 172))
+        $g.DrawString(((L $key) -f $AppVersion), $fu, $gb, (RF 763 494 246 22)); $gb.Dispose(); $fu.Dispose()
+    }
     $pen = New-Object System.Drawing.Pen((C 242 142 20), (P 2)); $p = RoundPath (RF 751 338 264 274) 7; $g.DrawPath($pen, $p); $pen.Dispose(); $p.Dispose()
 
     # progreso
@@ -695,7 +725,7 @@ $LangBox.Add_SelectedIndexChanged({
 $form.Add_Paint({ param($sender, $e) try { Draw-All $e.Graphics } catch { Log "paint: $($_.Exception.Message)" } })
 
 function Hit([int]$x, [int]$y) {
-    foreach ($n in 'Install', 'Play', 'Quit', 'File', 'Folder', 'Dest', 'DestBtn') {
+    foreach ($n in 'Install', 'Play', 'Quit', 'File', 'Folder', 'Dest', 'DestBtn', 'Update') {
         if ((RR $n).Contains([single]$x, [single]$y)) { return $n }
     }
     return ''
@@ -848,6 +878,10 @@ $Steps = @(
     @{ Key = 's7'; Begin = {
         $romName = Split-Path $script:S.RomDst -Leaf
         Copy-Item $PlaySrc $PlayExe -Force
+        # actualizador del juego (Esc > Actualizar) y lo que necesita saber
+        Copy-Item (Join-Path $Here 'bin\actualizar.ps1') (Join-Path $InstDir 'actualizar.ps1') -Force
+        [IO.File]::WriteAllText((Join-Path $InstDir 'ef_version.txt'), $AppVersion, (New-Object System.Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText((Join-Path $InstDir 'idioma.txt'), $script:Lang, (New-Object System.Text.UTF8Encoding($false)))
         # de serie: pantalla superior grande y la inferior pequena (layout large_top
         # de Zakuro) para este juego, en la configuracion portatil (appdata)
         $cfgDir = Join-Path $AppRoam 'zakuro'
@@ -908,7 +942,8 @@ function Next-Step {
         $script:Running = $false
         SetStatus 'done' $null 1 'ok'
         Log 'Instalacion terminada.'
-        Msg (L 'donemsg') 'Information'
+        if ($Jugar) { Start-Process -FilePath $PlayExe -WorkingDirectory $InstDir; $form.Close(); return }
+        if (-not $AutoUpdate) { Msg (L 'donemsg') 'Information' }
         return
     }
     $st = $Steps[$script:Index]
@@ -978,6 +1013,15 @@ function Pick-Rom {
     }
 }
 
+function Start-Install {
+    $script:Running = $true
+    $script:Index = -1
+    New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+    $form.Cursor = [System.Windows.Forms.Cursors]::Default
+    try { Next-Step; if ($script:Running) { $timer.Start() } } catch { Fail $_.Exception.Message }
+    $form.Invalidate()
+}
+
 $form.Add_MouseClick({ param($sender, $e)
     if ($e.Button -ne 'Left') { return }
     $h = Hit $e.X $e.Y
@@ -985,13 +1029,14 @@ $form.Add_MouseClick({ param($sender, $e)
     switch ($h) {
         'File'   { Pick-Rom }
         'Folder' { Pick-Rom }
-        'Install' {
-            $script:Running = $true
-            $script:Index = -1
-            New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
-            $form.Cursor = [System.Windows.Forms.Cursors]::Default
-            try { Next-Step; if ($script:Running) { $timer.Start() } } catch { Fail $_.Exception.Message }
-            $form.Invalidate()
+        'Install' { Start-Install }
+        'Update' {
+            # el actualizador descarga la version nueva, pone al dia esta carpeta
+            # del instalador y la instalacion, y vuelve a abrir el instalador
+            $upd = Join-Path $Here 'bin\actualizar.ps1'
+            $updArgs = "-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File `"$upd`" -Destino `"$InstDir`" -Instalador `"$Here`""
+            Start-Process -FilePath 'powershell.exe' -ArgumentList $updArgs -WorkingDirectory $Here
+            $form.Close()
         }
         'Play' { Start-Process -FilePath $PlayExe -WorkingDirectory $InstDir; $form.Close() }
         'Dest'    { Pick-Dest }
@@ -1011,4 +1056,49 @@ $form.Add_FormClosing({
 
 if (Is-Installed) { SetStatus 'installed' $null 1 'ok' }
 Log 'Instalador abierto.'
+
+# ---------------------------------------------------------------- actualizaciones
+$script:NewVersion = $null
+$script:UpdChecked = $false
+$script:UpdProc = $null
+$UpdJson = Join-Path $env:TEMP ("ef_ultima_{0}.json" -f $PID)
+$updTimer = New-Object System.Windows.Forms.Timer
+$updTimer.Interval = 500
+$updTimer.Add_Tick({
+    if (-not $script:UpdProc -or -not $script:UpdProc.HasExited) { return }
+    $updTimer.Stop()
+    $script:UpdChecked = $true
+    try {
+        if ($script:UpdProc.ExitCode -eq 0) {
+            $tag = ((Get-Content $UpdJson -Raw | ConvertFrom-Json).tag_name).TrimStart('v')
+            if ([version]$tag -gt [version]$AppVersion) { $script:NewVersion = $tag; Log "Version nueva disponible: $tag" }
+        }
+    } catch { Log "Comprobar actualizaciones: $($_.Exception.Message)" }
+    try { Remove-Item $UpdJson -Force -ErrorAction SilentlyContinue } catch {}
+    $form.Invalidate()
+})
+
+$form.Add_Shown({
+    if ($AutoUpdate) {
+        # actualizacion automatica: la copia del juego que ya esta instalada
+        $installedCopy = Get-ChildItem $GameDir -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '^\.(3ds|cci|cxi)$' } | Select-Object -First 1
+        if ($installedCopy) {
+            try {
+                $info = Read-Rom $installedCopy.FullName
+                $script:Rom = $installedCopy.FullName; $script:RomPath = $installedCopy.FullName; $script:TitleId = $info.TitleId
+                SetStatus 'upd_auto' $null 0
+                Start-Install
+                return
+            } catch { Log "AutoUpdate: $($_.Exception.Message)" }
+        }
+        Log 'AutoUpdate: no hay juego instalado en el destino'
+        return
+    }
+    try {
+        $script:UpdProc = Start-Process -FilePath 'curl.exe' -WindowStyle Hidden -PassThru -ArgumentList "-fsSL --max-time 15 -A ExtremeFighters -H `"Accept: application/vnd.github+json`" -o `"$UpdJson`" https://api.github.com/repos/kensaiken/ExtremeFighters/releases/latest"
+        $null = $script:UpdProc.Handle
+        $updTimer.Start()
+    } catch { $script:UpdChecked = $true }
+})
+
 [void]$form.ShowDialog()

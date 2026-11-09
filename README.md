@@ -6,7 +6,7 @@
 
 <p align="center">🇪🇸 <a href="README.es.md">Leer en español</a></p>
 
-<p align="center"><b>Version 0.3.0</b> · in development · <a href="CHANGELOG.md">changelog</a></p>
+<p align="center"><b>Version 0.5.0</b> · in development · <a href="CHANGELOG.md">changelog</a></p>
 
 <p align="center">
   <b>Native PC (Windows x64) port of <i>Dragon Ball Z: Extreme Butoden</i> (Nintendo 3DS)</b><br>
@@ -37,10 +37,12 @@ A graphical installer does everything for you: you only give it the `.3ds`.
 
 ### 🎮 Gameplay & controls
 - **Natively recompiled code**: the game runs as native x64 code instead of being interpreted, so it runs smoother and uses less CPU.
-- **Switch character / call your striker with the triggers**:
-  - **L2** = 2nd character's card · **R2** = 3rd character's card.
-  - Holding the trigger touches that card on the touch screen, like your finger on the 3DS. No mouse needed.
-  - Rebind or disable them in *Options → Combat controls*.
+- **Switch character / call your striker with the triggers**: each press **taps** the character's card on the touch screen, like your finger on the 3DS. Two control schemes in *Options → Combat controls*:
+  - **Triggers** (default): **L2** = 2nd card · **R2** = 3rd card · **L2 + R2 together** = 4th card.
+  - **L2 + button** (big teams): **R2** = 2nd card; **hold L2** and press the **left / top / right / bottom** face button = 2nd / 3rd / 4th / 5th card.
+  - Teams with more cards place them differently: press **Set** next to each card and **click it** on the bottom screen.
+  - Controls are learned from your own controller (works with 8BitDo and others), with a live indicator.
+- **Unlock everything**: *Options → Saves → Import a save…* loads a 100% save (Checkpoint/JKSM backup or Citra/Azahar save). Your current save is backed up first.
 - **Controller support** for Xbox, PlayStation and generic pads: the left stick is the Circle Pad and the Home button opens the menu.
 - **Save states** in 9 slots, on top of the game's own saves.
 
@@ -60,7 +62,14 @@ A graphical installer does everything for you: you only give it the `.3ds`.
 - Streamlined menu: Resume, Reset, Fullscreen, Save/Load state, **Online**, Options, Cheats and Quit.
 - Removed what makes no sense in a port: game library, camera, bug-report tools…
 - **Online**: rooms to play over the internet using the game's own local wireless battle (no rollback).
-- **Public room list**: type the address of an Extreme Fighters room server and join a room with one click. Only the server needs open ports, not the players.
+- **Create online room**: the game **opens your router by itself (UPnP)** and gives you a **room code** like `EF-7K2M4-9QX41`. Your friends type it and join: direct connection, the lowest lag possible.
+- If your connection can't receive players (**CG-NAT**), the game tells you and suggests joining someone else's room or a public server.
+- **Public room list** with **ping** for each room, closest first. Only the room server needs open ports.
+
+### 🔄 Automatic updates
+- The **installer** checks GitHub when it opens and shows an **UPDATE TO vX.X.X** button when there's a new version.
+- **In game** (pause menu): **Check for updates** and **Update to vX.X.X**. It also checks on its own at startup and shows a notice.
+- Updating downloads the new release, keeps your saves, settings and recompiled game (no recompiling) and opens the game again.
 
 ### 📦 All-in-one installer
 - **Only asks for the `.3ds`**: the recompiler comes prebuilt. No Rust, Visual Studio or manual compiler setup.
@@ -101,8 +110,10 @@ logs\        installation logs
 Jugar.exe    starts the game
 ```
 
-## 🌐 Online room server
-The release also includes **`ExtremeFighters_Servidor.zip`**: a small program (Windows and Linux) that keeps several online rooms open and publishes their list.
+## 🌐 Playing online
+**With friends (recommended):** *Esc → Online → Create online room* and share the **room code**. Your friends go to *Online → Room code or address*, type it and **Join**. Nothing else to download.
+
+**Online room server (optional):** for communities that want rooms open 24/7, the release also includes **`ExtremeFighters_Servidor.zip`**: a small program (Windows and Linux) that keeps several online rooms open and publishes their list.
 1. Run it on a PC that stays on or on a server (VPS): `Iniciar_servidor.bat` on Windows, `./ef-servidor-linux` on Linux.
 2. Open TCP ports **24872-24878** on that machine's router or firewall.
 3. Check it in a browser: `http://YOUR-IP:24872/`.

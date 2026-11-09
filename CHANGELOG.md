@@ -3,6 +3,33 @@
 Cada versión con sus novedades (✨), cambios (🔧) y correcciones (🐛).
 Numeración `0.X.Y` mientras esté en desarrollo: sube **Y** para correcciones y **X** para novedades.
 
+## [0.5.0] - 2026-11-10
+
+### 🐛 Correcciones
+- **L2/R2 fallaban a veces**: ahora cada pulsación hace un **toque corto** (0,1 s) sobre la carta, como un dedo, aunque se mantenga el gatillo.
+
+### ✨ Novedades
+- **Dos esquemas de control** para cambiar de personaje / llamar strikers:
+  - *Gatillos*: L2 = 2.ª carta, R2 = 3.ª, L2 + R2 a la vez = 4.ª.
+  - *L2 + botón*: R2 = 2.ª carta; con L2 mantenido, los botones izquierda/arriba/derecha/abajo = 2.ª a 5.ª carta.
+- **Ajustar la posición de cada carta** (hasta la 5.ª) haciendo clic sobre ella en la pantalla inferior.
+- **Importar partida guardada** (*Opciones → Partidas guardadas*): para tener todo desbloqueado con una partida al 100 %. Copia de seguridad automática de la partida actual.
+
+## [0.4.0] - 2026-11-09
+
+### ✨ Novedades
+- **Actualizaciones automáticas**:
+  - El instalador consulta GitHub al abrirse y muestra **ACTUALIZAR A vX.X.X** si hay versión nueva.
+  - En el juego (menú de pausa): **Buscar actualizaciones** y **Actualizar a vX.X.X**; también se comprueba al arrancar y avisa.
+  - Descarga la versión nueva, conserva partidas, configuración y juego recompilado, y vuelve a abrir el juego.
+- **Crear sala online** con **apertura automática del router (UPnP)** y **código de sala** (`EF-XXXXX-XXXXX`) para compartir. Conexión directa entre jugadores.
+- **Unirse con código**: el campo de dirección acepta códigos de sala.
+- **Aviso de CG-NAT**: si la conexión no puede recibir jugadores, el juego lo detecta y lo explica.
+- **Ping** de cada sala en la lista de salas públicas, ordenada de la más cercana a la más lejana.
+
+### 🔧 Cambios
+- El servidor de salas (`ExtremeFighters_Servidor.zip`) pasa a ser opcional: solo para salas abiertas 24/7.
+
 ## [0.3.0] - 2026-11-09
 
 ### ✨ Novedades
